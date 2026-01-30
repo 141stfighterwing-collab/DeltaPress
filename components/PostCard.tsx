@@ -6,29 +6,42 @@ import { supabase } from '../services/supabase';
 import { trackEvent } from '../services/analytics';
 
 interface PostCardProps {
-  post: Post;
+  post: Post & { journalist_id?: string };
 }
 
 const PostCard: React.FC<PostCardProps> = ({ post }) => {
+  const [authorInfo, setAuthorInfo] = useState<{ name: string, avatar?: string } | null>(null);
   const [categoryName, setCategoryName] = useState('General');
 
   useEffect(() => {
-    const fetchCategory = async () => {
+    const fetchMetadata = async () => {
+      // 1. Fetch Category
       if (post.category_id) {
         const { data } = await supabase.from('categories').select('name').eq('id', post.category_id).maybeSingle();
         if (data) setCategoryName(data.name);
       }
+
+      // 2. Fetch Journalist if exists
+      if (post.journalist_id) {
+        const { data: bot } = await supabase.from('journalists').select('name, gender').eq('id', post.journalist_id).maybeSingle();
+        if (bot) {
+          setAuthorInfo({
+            name: bot.name,
+            avatar: bot.gender === 'male' 
+              ? 'https://picsum.photos/id/1012/100/100' 
+              : 'https://picsum.photos/id/1027/100/100'
+          });
+        }
+      }
     };
-    fetchCategory();
-  }, [post.category_id]);
+    fetchMetadata();
+  }, [post.category_id, post.journalist_id]);
 
   const handleEngagement = () => {
     trackEvent('click', post.slug, { title: post.title });
   };
 
-  // Helper to get a preview without breaking HTML media tags
   const getSafePreview = (html: string) => {
-    // If the content is short or has media, return more of it to ensure player visibility
     if (html.length < 1000 || html.includes('<audio') || html.includes('<video') || html.includes('<iframe')) {
       return html;
     }
@@ -50,7 +63,21 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
         <div className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] flex items-center gap-2">
           <span>{new Date(post.created_at).toLocaleDateString()}</span>
           <span>•</span>
-          <span className="text-[#72aee6]">{categoryName}</span>
+          {authorInfo ? (
+              <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full overflow-hidden border border-gray-100 bg-gray-50 shadow-sm">
+                    <img 
+                      src={authorInfo.avatar} 
+                      alt={authorInfo.name} 
+                      className="w-full h-full object-cover" 
+                      onError={(e) => { (e.target as HTMLImageElement).src = 'https://picsum.photos/100/100'; }}
+                    />
+                  </div>
+                  <span className="text-[#1d2327] font-black">{authorInfo.name}</span>
+              </div>
+          ) : (
+              <span className="text-[#72aee6] font-black">{categoryName}</span>
+          )}
         </div>
       </header>
 

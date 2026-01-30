@@ -9,6 +9,7 @@ import { sanitizeHtml, stripAllHtml, isValidEmail, LIMITS } from '../services/se
 const SinglePost: React.FC = () => {
   const { slug } = useParams();
   const [post, setPost] = useState<any>(null);
+  const [authorInfo, setAuthorInfo] = useState<{ name: string, avatar?: string } | null>(null);
   const [categoryName, setCategoryName] = useState('General');
   const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,16 +29,33 @@ const SinglePost: React.FC = () => {
     });
   }, []);
 
-  const fetchPostAndComments = async () => {
+  const fetchPostAndMetadata = async () => {
     if (!slug) return;
     try {
       const { data: postData } = await supabase.from('posts').select('*').eq('slug', slug).single();
       if (postData) {
         setPost(postData);
+        
+        // Fetch Category
         if (postData.category_id) {
           const { data: cat } = await supabase.from('categories').select('name').eq('id', postData.category_id).maybeSingle();
           if (cat) setCategoryName(cat.name);
         }
+
+        // Fetch Bot Info
+        if (postData.journalist_id) {
+            const { data: bot } = await supabase.from('journalists').select('name, gender').eq('id', postData.journalist_id).maybeSingle();
+            if (bot) {
+                setAuthorInfo({
+                    name: bot.name,
+                    avatar: bot.gender === 'male' 
+                    ? 'https://picsum.photos/id/1012/100/100' 
+                    : 'https://picsum.photos/id/1027/100/100'
+                });
+            }
+        }
+
+        // Fetch Comments
         const { data: comms } = await supabase.from('comments').select('*').eq('post_id', postData.id).order('created_at', { ascending: true });
         if (comms) setComments(comms);
       }
@@ -49,30 +67,17 @@ const SinglePost: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchPostAndComments();
+    fetchPostAndMetadata();
   }, [slug]);
 
   const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // 1. Basic Field Check
     if (!commentName || !commentText || !commentEmail) return;
-
-    // 2. Security: Email Validation
-    if (!isValidEmail(commentEmail)) {
-      alert("Please provide a valid email address.");
-      return;
-    }
-
-    // 3. Security: Length Constraints
-    if (commentText.length > LIMITS.COMMENT_CONTENT) {
-      alert(`Comment is too long (max ${LIMITS.COMMENT_CONTENT} chars).`);
-      return;
-    }
+    if (!isValidEmail(commentEmail)) { alert("Please provide a valid email address."); return; }
+    if (commentText.length > LIMITS.COMMENT_CONTENT) { alert(`Comment is too long.`); return; }
 
     setIsSubmitting(true);
     try {
-      // 4. Security: Sanitize all user-provided strings
       const safeAuthorName = stripAllHtml(commentName).substring(0, LIMITS.DISPLAY_NAME);
       const safeCommentContent = sanitizeHtml(commentText);
 
@@ -85,7 +90,7 @@ const SinglePost: React.FC = () => {
       });
       if (error) throw error;
       setCommentText('');
-      fetchPostAndComments();
+      fetchPostAndMetadata();
     } catch (err: any) {
       alert("Submission Blocked: " + err.message);
     } finally {
@@ -104,7 +109,21 @@ const SinglePost: React.FC = () => {
           <div className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] flex items-center gap-3">
             <span>{new Date(post.created_at).toLocaleDateString()}</span>
             <span>•</span>
-            <span className="text-[#72aee6] font-black">{categoryName}</span>
+            {authorInfo ? (
+                <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full overflow-hidden border border-gray-100 bg-gray-50 shadow-sm">
+                        <img 
+                          src={authorInfo.avatar} 
+                          alt={authorInfo.name} 
+                          className="w-full h-full object-cover" 
+                          onError={(e) => { (e.target as HTMLImageElement).src = 'https://picsum.photos/100/100'; }}
+                        />
+                    </div>
+                    <span className="text-[#1d2327] font-black">{authorInfo.name}</span>
+                </div>
+            ) : (
+                <span className="text-[#72aee6] font-black">{categoryName}</span>
+            )}
           </div>
         </header>
 

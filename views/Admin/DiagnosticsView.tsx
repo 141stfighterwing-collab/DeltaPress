@@ -22,7 +22,7 @@ const DiagnosticsView: React.FC = () => {
   const [showSql, setShowSql] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
 
-  const sqlFix = `-- 🚀 TWENTY TEN - SUPREME SCHEMA REPAIR V4 (STABLE)
+  const sqlFix = `-- 🚀 TWENTY TEN - SUPREME SCHEMA REPAIR V6 (BOT PERSONA UPDATE)
 -- RUN THIS IN YOUR SUPABASE SQL EDITOR:
 
 -- 1. HARDEN CATEGORIES
@@ -32,11 +32,27 @@ CREATE TABLE IF NOT EXISTS public.categories (
   slug TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
--- Force addition of missing columns if table already existed
-ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
-ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS slug TEXT;
 
--- 2. HARDEN SITE SETTINGS
+-- 2. HARDEN JOURNALISTS (BOTS)
+CREATE TABLE IF NOT EXISTS public.journalists (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  niche TEXT,
+  category TEXT,
+  schedule TEXT,
+  status TEXT DEFAULT 'active',
+  last_run TIMESTAMPTZ,
+  perspective INTEGER DEFAULT 0,
+  gender TEXT DEFAULT 'female',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.journalists ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT 'female';
+ALTER TABLE public.journalists ADD COLUMN IF NOT EXISTS perspective INTEGER DEFAULT 0;
+
+-- 3. HARDEN POSTS (AUTHORSHIP)
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS journalist_id UUID REFERENCES public.journalists(id);
+
+-- 4. HARDEN SITE SETTINGS
 CREATE TABLE IF NOT EXISTS public.site_settings (
   id INTEGER PRIMARY KEY DEFAULT 1,
   title TEXT DEFAULT 'Twenty Ten',
@@ -50,48 +66,40 @@ CREATE TABLE IF NOT EXISTS public.site_settings (
   content_moderation BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
-ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS header_pos_x INTEGER DEFAULT 50;
-ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS header_pos_y INTEGER DEFAULT 50;
-ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS header_fit TEXT DEFAULT 'cover';
 
--- 3. RESET PERMISSIONS (Nuclear Option for Demo)
--- Disable then re-enable RLS to clear stale policies
+-- 5. RESET PERMISSIONS
 ALTER TABLE public.categories DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_settings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.posts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.journalists DISABLE ROW LEVEL SECURITY;
 
--- Re-enable RLS
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.journalists ENABLE ROW LEVEL SECURITY;
 
--- Drop all possible old names for policies
-DROP POLICY IF EXISTS "Allow All" ON public.categories;
-DROP POLICY IF EXISTS "Public Read" ON public.categories;
 DROP POLICY IF EXISTS "Full Access" ON public.categories;
-DROP POLICY IF EXISTS "Public Read Settings" ON public.site_settings;
-DROP POLICY IF EXISTS "Full Management" ON public.site_settings;
 DROP POLICY IF EXISTS "Full Settings Access" ON public.site_settings;
-DROP POLICY IF EXISTS "Public Post Read" ON public.posts;
 DROP POLICY IF EXISTS "Full Post Access" ON public.posts;
+DROP POLICY IF EXISTS "Full Bot Access" ON public.journalists;
 
--- Create explicit FOR ALL policies
-CREATE POLICY "Categories_Policy" ON public.categories FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Settings_Policy" ON public.site_settings FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Posts_Policy" ON public.posts FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Full Access" ON public.categories FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Full Settings Access" ON public.site_settings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Full Post Access" ON public.posts FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Full Bot Access" ON public.journalists FOR ALL USING (true) WITH CHECK (true);
 
--- 4. GRANT ACCESS TO ROLES
+-- 6. GRANT ACCESS
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, postgres, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, postgres, service_role;
 GRANT ALL ON SCHEMA public TO anon, authenticated, postgres, service_role;
 
--- 5. INITIAL DATA SEED
+-- 7. INITIAL DATA SEED
 INSERT INTO public.site_settings (id, title, slogan)
-VALUES (1, 'The Vanguard Collective', 'Democracy and Worker Unity')
+VALUES (1, 'The Vanguard Collective', 'World News & Ideological Analysis')
 ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, slogan = EXCLUDED.slogan;
 
 INSERT INTO public.categories (name, slug)
-VALUES ('Politics', 'politics'), ('Cybersecurity', 'cybersecurity'), ('Uncategorized', 'uncategorized'), ('History', 'history')
+VALUES ('Politics', 'politics'), ('Economics', 'economics'), ('Technology', 'technology'), ('General', 'general')
 ON CONFLICT DO NOTHING;`;
 
   const addLog = (msg: string) => {
@@ -101,7 +109,7 @@ ON CONFLICT DO NOTHING;`;
   const scanTableIntegrity = async () => {
     setIsScanning(true);
     addLog("Scanning database schema and permissions...");
-    const coreTables = ['categories', 'posts', 'profiles', 'rss_feeds', 'site_settings', 'comments', 'contacts'];
+    const coreTables = ['categories', 'posts', 'profiles', 'rss_feeds', 'site_settings', 'comments', 'contacts', 'journalists'];
     const healthResults: TableHealth[] = [];
 
     for (const table of coreTables) {
@@ -215,8 +223,8 @@ ON CONFLICT DO NOTHING;`;
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 bg-red-50 text-red-600 rounded flex items-center justify-center text-xl">🛠️</div>
                   <div>
-                    <h3 className="text-sm font-black text-red-600 uppercase tracking-widest">SUPREME REPAIR V4</h3>
-                    <p className="text-[10px] text-gray-400 uppercase font-bold">Fixes Permissions & Columns</p>
+                    <h3 className="text-sm font-black text-red-600 uppercase tracking-widest">SUPREME REPAIR V6</h3>
+                    <p className="text-[10px] text-gray-400 uppercase font-bold">Bot Personas & Authorship</p>
                   </div>
                 </div>
                 <div className="relative">

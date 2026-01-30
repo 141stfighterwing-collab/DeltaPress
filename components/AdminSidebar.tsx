@@ -1,31 +1,36 @@
 
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 
 const AdminSidebar: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [role, setRole] = useState<string>('user');
+  const [userProfile, setUserProfile] = useState<{ display_name?: string, avatar_url?: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchRole = async () => {
+    const fetchUserAndRole = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, display_name, avatar_url')
           .eq('id', session.user.id)
           .maybeSingle();
-        if (profile) setRole(profile.role);
+        
+        if (profile) {
+          setRole(profile.role);
+          setUserProfile(profile);
+        }
       }
       setLoading(false);
     };
-    fetchRole();
+    fetchUserAndRole();
   }, []);
 
-  // Strict Permission Schema
   const menuItems = [
     { label: 'Dashboard', path: '/admin', icon: '📊', roles: ['admin', 'editor', 'reviewer', 'user'] },
     { label: 'Analytics', path: '/admin/analytics', icon: '📈', roles: ['admin', 'editor'] },
@@ -37,45 +42,60 @@ const AdminSidebar: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     { label: 'RSS Feeds', path: '/admin/rss', icon: '📡', roles: ['admin'] },
     { label: 'Journalists', path: '/admin/journalists', icon: '🤖', roles: ['admin'] },
     { label: 'Services', path: '/admin/services', icon: '🛠️', roles: ['admin'] },
-    { label: 'Partners', path: '/admin/partners', icon: '👥', roles: ['admin'] },
     { label: 'Members', path: '/admin/members', icon: '👤', roles: ['admin'] },
-    { label: 'Projects', path: '/admin/projects', icon: '📋', roles: ['admin'] },
     { label: 'Media', path: '/admin/media', icon: '📷', roles: ['admin', 'editor'] },
     { label: 'Pages', path: '/admin/pages', icon: '📄', roles: ['admin', 'editor'] },
     { label: 'Comments', path: '/admin/comments', icon: '💬', roles: ['admin', 'editor', 'reviewer', 'user'] },
-    { label: 'Contact', path: '/admin/contact', icon: '✉️', roles: ['admin', 'editor', 'reviewer', 'user'] },
     { type: 'separator' },
     { label: 'Appearance', path: '/admin/appearance', icon: '🖌️', roles: ['admin', 'editor', 'reviewer', 'user'] },
-    { label: 'Plugins', path: '/admin/plugins', icon: '🔌', roles: ['admin'] },
-    { label: 'Users', path: '/admin/users', icon: '👤', roles: ['admin'] },
-    { label: 'Tools', path: '/admin/tools', icon: '🔧', roles: ['admin'] },
     { label: 'Diagnostics', path: '/admin/diagnostics', icon: '🩺', roles: ['admin'] },
     { label: 'Settings', path: '/admin/settings', icon: '⚙️', roles: ['admin'] },
   ];
 
   const isActive = (path: string) => location.pathname === path;
 
-  // Filter items strictly based on the user's role
   const filteredItems = menuItems.filter(item => {
     if (item.type === 'separator') return true;
     return (item as any).roles.includes(role);
   }).filter((item, index, self) => {
-    // Prevent double separators or separators as first item
     if (item.type === 'separator' && (index === 0 || self[index-1]?.type === 'separator')) return false;
     return true;
   });
 
   return (
-    <div className={`${collapsed ? 'w-12' : 'w-52'} bg-[#23282d] text-[#eee] flex flex-col h-screen transition-all duration-200 sticky top-0 overflow-y-auto overflow-x-hidden select-none z-50 shrink-0`}>
-      <div className="p-4 bg-[#1d2327] flex items-center gap-3">
-        <div className="w-8 h-8 bg-[#0073aa] rounded flex items-center justify-center text-white font-bold shrink-0">W</div>
-        {!collapsed && <span className="font-semibold text-sm truncate text-white uppercase tracking-tighter">Admin Panel</span>}
+    <div className={`${collapsed ? 'w-12' : 'w-56'} bg-[#23282d] text-[#eee] flex flex-col h-screen transition-all duration-200 sticky top-0 overflow-y-auto overflow-x-hidden select-none z-50 shrink-0`}>
+      
+      {/* Identity Header */}
+      <div className="p-4 bg-[#1d2327] flex items-center gap-3 border-b border-white/5">
+        <div 
+          onClick={() => navigate('/admin/appearance')}
+          className="w-8 h-8 rounded-full overflow-hidden bg-gray-700 shrink-0 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all border border-white/10"
+        >
+          {userProfile?.avatar_url ? (
+            <img src={userProfile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gray-600">
+              <svg viewBox="0 0 24 24" className="w-5 h-5 text-gray-400" fill="currentColor">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+              </svg>
+            </div>
+          )}
+        </div>
+        {!collapsed && (
+          <div className="min-w-0">
+            <span className="block text-[11px] font-black text-white uppercase tracking-tighter truncate leading-none mb-1">
+              {userProfile?.display_name || 'Staff Member'}
+            </span>
+            <span className="block text-[8px] font-bold text-blue-400 uppercase tracking-widest leading-none">
+              {role}
+            </span>
+          </div>
+        )}
       </div>
 
       <nav className="flex-1 py-1">
         {loading ? (
           <div className="px-4 py-10 opacity-20 animate-pulse space-y-4">
-            <div className="h-4 bg-gray-500 rounded w-full"></div>
             <div className="h-4 bg-gray-500 rounded w-full"></div>
             <div className="h-4 bg-gray-500 rounded w-full"></div>
           </div>

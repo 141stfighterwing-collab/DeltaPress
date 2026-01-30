@@ -16,7 +16,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     title: 'Twenty Ten',
     slogan: 'Just another WordPress theme',
     header_image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&q=80&w=940&h=200',
-    header_fit: 'cover' as 'cover' | 'contain'
+    header_fit: 'cover' as 'cover' | 'contain' | 'none' | 'scale-down',
+    header_pos_x: 50,
+    header_pos_y: 50
   });
 
   useEffect(() => {
@@ -35,7 +37,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           title: siteSettings.title || 'Twenty Ten',
           slogan: siteSettings.slogan || 'Just another WordPress theme',
           header_image: siteSettings.header_image || 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&q=80&w=940&h=200',
-          header_fit: siteSettings.header_fit || 'cover'
+          header_fit: siteSettings.header_fit || 'cover',
+          header_pos_x: siteSettings.header_pos_x ?? 50,
+          header_pos_y: siteSettings.header_pos_y ?? 50
         });
       }
 
@@ -80,7 +84,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <Link to="/" className={getNavClass('/')}>Home</Link>
             <Link to="/news" className={getNavClass('/news')}>News</Link>
             
-            {/* Dynamic Pages */}
             {navPages.map((page, idx) => (
               <Link 
                 key={idx} 
@@ -104,7 +107,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <img 
               src={settings.header_image} 
               alt="Site Header" 
-              className={`w-full h-full ${settings.header_fit === 'cover' ? 'object-cover' : 'object-contain'}`}
+              className="w-full h-full"
+              style={{ 
+                objectFit: settings.header_fit, 
+                objectPosition: `${settings.header_pos_x}% ${settings.header_pos_y}%` 
+              }}
               onError={(e) => (e.target as HTMLImageElement).src = 'https://via.placeholder.com/940x200?text=Header+Image'}
             />
           </div>

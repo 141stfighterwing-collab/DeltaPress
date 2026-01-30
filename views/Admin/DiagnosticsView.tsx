@@ -22,94 +22,77 @@ const DiagnosticsView: React.FC = () => {
   const [showSql, setShowSql] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
 
-  const sqlFix = `-- 🚀 TWENTY TEN - ATOMIC RBAC REPAIR
--- PASTE THIS INTO YOUR SUPABASE SQL EDITOR TO FIX OWNERSHIP & ROLES:
+  const sqlFix = `-- 🚀 TWENTY TEN - SUPREME SCHEMA REPAIR V4 (STABLE)
+-- RUN THIS IN YOUR SUPABASE SQL EDITOR:
 
--- 1. SETUP PROFILES TABLE
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
-  username TEXT UNIQUE,
-  display_name TEXT,
-  role TEXT DEFAULT 'user',
-  status TEXT DEFAULT 'active',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 2. REPAIR COMMENTS (Add ownership)
-CREATE TABLE IF NOT EXISTS public.comments (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  post_id UUID REFERENCES public.posts ON DELETE CASCADE,
-  user_id UUID REFERENCES auth.users,
-  author_name TEXT,
-  author_email TEXT,
-  content TEXT,
-  status TEXT DEFAULT 'pending',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-ALTER TABLE public.comments ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users;
-
--- 3. REPAIR CONTACTS (Add ownership)
-CREATE TABLE IF NOT EXISTS public.contacts (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users,
-  name TEXT,
-  email TEXT,
-  subject TEXT,
-  message TEXT,
-  status TEXT DEFAULT 'new',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users;
-
--- 4. AI JOURNALISTS TABLE
-CREATE TABLE IF NOT EXISTS public.journalists (
+-- 1. HARDEN CATEGORIES
+CREATE TABLE IF NOT EXISTS public.categories (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
-  niche TEXT,
-  category TEXT,
-  schedule TEXT,
-  status TEXT DEFAULT 'active',
-  last_run TIMESTAMPTZ,
+  slug TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- Force addition of missing columns if table already existed
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS slug TEXT;
 
--- 5. PROFILE TRIGGER
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger AS $$
-BEGIN
-  INSERT INTO public.profiles (id, username, display_name, role)
-  VALUES (
-    new.id, 
-    COALESCE(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)), 
-    COALESCE(new.raw_user_meta_data->>'display_name', split_part(new.email, '@', 1)), 
-    'user'
-  )
-  ON CONFLICT (id) DO NOTHING;
-  RETURN new;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- 2. HARDEN SITE SETTINGS
+CREATE TABLE IF NOT EXISTS public.site_settings (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  title TEXT DEFAULT 'Twenty Ten',
+  slogan TEXT DEFAULT 'Just another WordPress theme',
+  header_image TEXT,
+  header_fit TEXT DEFAULT 'cover',
+  header_pos_x INTEGER DEFAULT 50,
+  header_pos_y INTEGER DEFAULT 50,
+  banner_text TEXT,
+  theme TEXT DEFAULT 'default',
+  content_moderation BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS header_pos_x INTEGER DEFAULT 50;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS header_pos_y INTEGER DEFAULT 50;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS header_fit TEXT DEFAULT 'cover';
 
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+-- 3. RESET PERMISSIONS (Nuclear Option for Demo)
+-- Disable then re-enable RLS to clear stale policies
+ALTER TABLE public.categories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.site_settings DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.posts DISABLE ROW LEVEL SECURITY;
 
--- 6. RESET RLS & PERMISSIONS
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.contacts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.journalists ENABLE ROW LEVEL SECURITY;
+-- Re-enable RLS
+ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
 
--- 7. GLOBAL POLICIES
-DROP POLICY IF EXISTS "Public Select" ON public.comments;
-CREATE POLICY "Public Select" ON public.comments FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Owner Insert" ON public.comments;
-CREATE POLICY "Owner Insert" ON public.comments FOR INSERT WITH CHECK (true);
-DROP POLICY IF EXISTS "Admin Manage Journalists" ON public.journalists;
-CREATE POLICY "Admin Manage Journalists" ON public.journalists FOR ALL USING (true);
+-- Drop all possible old names for policies
+DROP POLICY IF EXISTS "Allow All" ON public.categories;
+DROP POLICY IF EXISTS "Public Read" ON public.categories;
+DROP POLICY IF EXISTS "Full Access" ON public.categories;
+DROP POLICY IF EXISTS "Public Read Settings" ON public.site_settings;
+DROP POLICY IF EXISTS "Full Management" ON public.site_settings;
+DROP POLICY IF EXISTS "Full Settings Access" ON public.site_settings;
+DROP POLICY IF EXISTS "Public Post Read" ON public.posts;
+DROP POLICY IF EXISTS "Full Post Access" ON public.posts;
 
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;`;
+-- Create explicit FOR ALL policies
+CREATE POLICY "Categories_Policy" ON public.categories FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Settings_Policy" ON public.site_settings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Posts_Policy" ON public.posts FOR ALL USING (true) WITH CHECK (true);
+
+-- 4. GRANT ACCESS TO ROLES
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, postgres, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, postgres, service_role;
+GRANT ALL ON SCHEMA public TO anon, authenticated, postgres, service_role;
+
+-- 5. INITIAL DATA SEED
+INSERT INTO public.site_settings (id, title, slogan)
+VALUES (1, 'The Vanguard Collective', 'Democracy and Worker Unity')
+ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, slogan = EXCLUDED.slogan;
+
+INSERT INTO public.categories (name, slug)
+VALUES ('Politics', 'politics'), ('Cybersecurity', 'cybersecurity'), ('Uncategorized', 'uncategorized'), ('History', 'history')
+ON CONFLICT DO NOTHING;`;
 
   const addLog = (msg: string) => {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -118,7 +101,7 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;`;
   const scanTableIntegrity = async () => {
     setIsScanning(true);
     addLog("Scanning database schema and permissions...");
-    const coreTables = ['categories', 'posts', 'profiles', 'rss_feeds', 'site_settings', 'comments', 'contacts', 'journalists'];
+    const coreTables = ['categories', 'posts', 'profiles', 'rss_feeds', 'site_settings', 'comments', 'contacts'];
     const healthResults: TableHealth[] = [];
 
     for (const table of coreTables) {
@@ -232,8 +215,8 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;`;
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 bg-red-50 text-red-600 rounded flex items-center justify-center text-xl">🛠️</div>
                   <div>
-                    <h3 className="text-sm font-black text-red-600 uppercase tracking-widest">RBAC SQL FIX</h3>
-                    <p className="text-[10px] text-gray-400 uppercase font-bold">Fixes Ownership Columns</p>
+                    <h3 className="text-sm font-black text-red-600 uppercase tracking-widest">SUPREME REPAIR V4</h3>
+                    <p className="text-[10px] text-gray-400 uppercase font-bold">Fixes Permissions & Columns</p>
                   </div>
                 </div>
                 <div className="relative">

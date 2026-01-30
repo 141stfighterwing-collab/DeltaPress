@@ -31,6 +31,7 @@ const Sidebar: React.FC = () => {
     const fetchSidebarData = async () => {
       setLoading(true);
       try {
+        // 1. Fetch Recent Posts
         const { data: postsData } = await supabase
           .from('posts')
           .select('id, title, slug')
@@ -41,11 +42,12 @@ const Sidebar: React.FC = () => {
 
         if (postsData) setRecentPosts(postsData);
 
-        const { data: catData } = await supabase
+        // 2. Fetch Categories (Schema Resilient)
+        const { data: catData, error: catError } = await supabase
           .from('categories')
           .select('id, name');
 
-        if (catData) {
+        if (catData && !catError) {
           const { data: postsWithCats } = await supabase
             .from('posts')
             .select('category_id')
@@ -59,6 +61,7 @@ const Sidebar: React.FC = () => {
           })));
         }
 
+        // 3. Fetch RSS Mini News
         const { data: feeds } = await supabase.from('rss_feeds').select('url').limit(1);
         if (feeds && feeds.length > 0) {
           try {
@@ -97,7 +100,7 @@ const Sidebar: React.FC = () => {
         </div>
       </section>
 
-      {/* Global Pulse Widget (Classic Blue Box Style) */}
+      {/* Global Pulse Widget */}
       {miniNews.length > 0 && (
         <section className="bg-blue-50/50 p-6 border border-blue-100 rounded-sm">
           <h3 className="font-black border-b border-blue-100 pb-2 mb-4 uppercase tracking-widest text-[10px] text-blue-600">Global Pulse</h3>
@@ -145,7 +148,7 @@ const Sidebar: React.FC = () => {
               <span className="text-[10px] text-gray-300 font-bold group-hover:text-gray-500">({cat.count})</span>
             </li>
           ))}
-          {categories.length === 0 && <li className="text-gray-400 italic text-xs">No categories found</li>}
+          {categories.length === 0 && !loading && <li className="text-gray-400 italic text-xs">No categories found</li>}
         </ul>
       </section>
 

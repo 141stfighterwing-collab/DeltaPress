@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
 import { stripAllHtml, isValidUrl } from '../../services/security';
@@ -8,23 +8,25 @@ import AdminSidebar from '../../components/AdminSidebar';
 const DEFAULT_HEADERS = [
   { url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=1200&auto=format&fit=crop', name: 'Pine Forest' },
   { url: 'https://images.unsplash.com/photo-1488459736882-d7922596f733?q=80&w=1200&auto=format&fit=crop', name: 'Berries' },
-  { url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1200&auto=format&fit=crop', name: 'Ocean' },
-  { url: 'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?q=80&w=1200&auto=format&fit=crop', name: 'City' },
-  { url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=1200&auto=format&fit=crop', name: 'Mountains' },
-  { url: 'https://images.unsplash.com/photo-1495020689067-958852a7765e?q=80&w=1200&auto=format&fit=crop', name: 'Desk' }
+  { url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1200&auto=format&fit=crop', name: 'Ocean' }
 ];
 
 const SettingsView: React.FC = () => {
   const navigate = useNavigate();
+  const previewRef = useRef<HTMLDivElement>(null);
+  
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isColumnMissing, setIsColumnMissing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
   const [formData, setFormData] = useState({
     title: '',
     slogan: '',
     header_image: '',
-    header_fit: 'cover' as 'cover' | 'contain',
+    header_fit: 'cover' as 'cover' | 'contain' | 'none' | 'scale-down',
+    header_pos_x: 50,
+    header_pos_y: 50,
     banner_text: '',
     content_moderation: false
   });
@@ -32,22 +34,22 @@ const SettingsView: React.FC = () => {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const { data, error } = await supabase.from('site_settings').select('*').eq('id', 1).maybeSingle();
+        const { data, error: fetchError } = await supabase.from('site_settings').select('*').eq('id', 1).maybeSingle();
+        if (fetchError) throw fetchError;
         if (data) {
-          const columnMissing = typeof data.content_moderation === 'undefined';
-          setIsColumnMissing(columnMissing);
-
           setFormData({
             title: data.title || '',
             slogan: data.slogan || '',
             header_image: data.header_image || DEFAULT_HEADERS[0].url,
             header_fit: data.header_fit || 'cover',
+            header_pos_x: data.header_pos_x ?? 50,
+            header_pos_y: data.header_pos_y ?? 50,
             banner_text: data.banner_text || '',
             content_moderation: !!data.content_moderation
           });
         }
-      } catch (err) {
-        console.error("Fetch error", err);
+      } catch (err: any) {
+        setError("Load Failed: " + err.message);
       } finally {
         setLoading(false);
       }
@@ -55,45 +57,57 @@ const SettingsView: React.FC = () => {
     fetchSettings();
   }, []);
 
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (formData.header_fit !== 'cover' && formData.header_fit !== 'none') return;
+    setIsDragging(true);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !previewRef.current) return;
+    
+    const rect = previewRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    
+    setFormData(prev => ({
+      ...prev,
+      header_pos_x: Math.max(0, Math.min(100, Math.round(x))),
+      header_pos_y: Math.max(0, Math.min(100, Math.round(y)))
+    }));
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // 1. Security: URL Validation
     if (formData.header_image && !isValidUrl(formData.header_image)) {
-      alert("Please provide a valid image URL starting with http:// or https://");
+      alert("Invalid image URL.");
       return;
     }
 
     setSaving(true);
     setError(null);
     try {
-      // 2. Security: Strip all HTML from identity fields
       const payload: any = {
         id: 1,
         title: stripAllHtml(formData.title),
         slogan: stripAllHtml(formData.slogan),
         header_image: formData.header_image,
         header_fit: formData.header_fit,
+        header_pos_x: formData.header_pos_x,
+        header_pos_y: formData.header_pos_y,
         banner_text: stripAllHtml(formData.banner_text),
       };
 
-      if (!isColumnMissing) {
-        payload.content_moderation = formData.content_moderation;
-      }
-
-      const { error } = await supabase.from('site_settings').upsert(payload, { onConflict: 'id' });
-      
-      if (error) throw error;
-      alert("Site identity verified and updated.");
+      const { error: upsertError } = await supabase.from('site_settings').upsert(payload, { onConflict: 'id' });
+      if (upsertError) throw upsertError;
+      alert("Site identity and layout committed.");
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "Unknown error occurred during save.");
+      alert(`Commit Failed: ${err.message}\n\nThis usually means your database columns are missing. Please go to Diagnostics and run the Repair Script.`);
     } finally {
       setSaving(false);
     }
-  };
-
-  const selectDefaultHeader = (url: string) => {
-    setFormData({ ...formData, header_image: url });
   };
 
   if (loading) return <div className="p-10 text-center text-gray-400 font-bold animate-pulse font-serif italic">Synchronizing Site Core...</div>;
@@ -106,6 +120,63 @@ const SettingsView: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900 font-serif">Site Settings</h1>
           <p className="text-gray-600 text-sm italic">Configure your banner, site identity, and safety guards.</p>
         </header>
+
+        {error && (
+            <div className="mb-8 p-6 bg-red-50 border-l-8 border-red-600 rounded shadow-sm">
+                <h3 className="text-red-600 font-black uppercase text-[10px] tracking-widest mb-1">Database Error</h3>
+                <p className="text-red-800 font-mono text-xs">{error}</p>
+                <div className="mt-4">
+                    <Link to="/admin/diagnostics" className="text-[10px] font-black uppercase bg-red-600 text-white px-4 py-2 rounded">Repair DB Schema 🛠️</Link>
+                </div>
+            </div>
+        )}
+
+        <section className="mb-10 bg-white p-4 rounded-lg shadow-xl border border-gray-200">
+            <div className="flex items-center justify-between mb-4 px-2">
+                <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">Header Workspace Preview</h3>
+                <div className="flex gap-4">
+                     <div className="text-[9px] font-bold text-blue-500 uppercase">X: {formData.header_pos_x}%</div>
+                     <div className="text-[9px] font-bold text-blue-500 uppercase">Y: {formData.header_pos_y}%</div>
+                </div>
+            </div>
+            
+            <div 
+                ref={previewRef}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                className={`relative w-full h-[220px] bg-gray-100 overflow-hidden border-4 border-gray-50 rounded select-none ${isDragging ? 'cursor-grabbing' : (formData.header_fit === 'cover' || formData.header_fit === 'none' ? 'cursor-crosshair' : 'cursor-default')}`}
+            >
+                <img 
+                    src={formData.header_image} 
+                    alt="Preview" 
+                    draggable={false}
+                    className="w-full h-full pointer-events-none transition-all duration-75"
+                    style={{ 
+                        objectFit: formData.header_fit, 
+                        objectPosition: `${formData.header_pos_x}% ${formData.header_pos_y}%` 
+                    }}
+                />
+                
+                {/* Visual Drag Helper */}
+                {(formData.header_fit === 'cover' || formData.header_fit === 'none') && (
+                    <div 
+                        className="absolute w-8 h-8 border-2 border-white rounded-full bg-blue-500/20 shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-1/2"
+                        style={{ left: `${formData.header_pos_x}%`, top: `${formData.header_pos_y}%` }}
+                    >
+                        <div className="absolute inset-0 m-auto w-1 h-1 bg-white rounded-full"></div>
+                    </div>
+                )}
+
+                <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full text-[9px] text-white font-black uppercase tracking-widest border border-white/20">
+                    Live Canvas
+                </div>
+            </div>
+            {(formData.header_fit === 'cover' || formData.header_fit === 'none') && (
+                <p className="text-[9px] text-gray-400 italic mt-3 text-center uppercase tracking-tighter">Click and drag above to reposition image focus</p>
+            )}
+        </section>
 
         <div className="bg-white p-8 rounded shadow-sm border border-gray-200">
           <form onSubmit={handleSave} className="space-y-12">
@@ -130,18 +201,30 @@ const SettingsView: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-8 border-t border-gray-100">
-              <h3 className="text-xs font-black uppercase text-gray-400 tracking-[0.2em] mb-6">Header Visuals</h3>
-              <input 
-                type="text" 
-                placeholder="https://images.unsplash.com/..."
-                className={`w-full border-2 p-4 rounded text-sm font-mono focus:ring-2 outline-none transition-all ${formData.header_image && !isValidUrl(formData.header_image) ? 'border-red-500 bg-red-50' : 'border-gray-100 bg-gray-50'}`}
-                value={formData.header_image}
-                onChange={e => setFormData({...formData, header_image: e.target.value})}
-              />
-              {formData.header_image && !isValidUrl(formData.header_image) && (
-                <p className="text-red-500 text-[10px] font-black uppercase mt-2">Invalid URL protocol</p>
-              )}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-8 border-t border-gray-100">
+                <div className="md:col-span-2">
+                    <label className="block text-xs font-black uppercase text-gray-500 mb-2 tracking-widest">Header Image URL</label>
+                    <input 
+                        type="text" 
+                        placeholder="Paste image URL here..."
+                        className={`w-full border-2 p-4 rounded text-sm font-mono focus:ring-2 outline-none transition-all ${formData.header_image && !isValidUrl(formData.header_image) ? 'border-red-500 bg-red-50' : 'border-gray-100 bg-gray-50'}`}
+                        value={formData.header_image}
+                        onChange={e => setFormData({...formData, header_image: e.target.value})}
+                    />
+                </div>
+                <div>
+                    <label className="block text-xs font-black uppercase text-gray-500 mb-2 tracking-widest">Scale & Alignment</label>
+                    <select 
+                        className="w-full border border-gray-300 p-4 rounded text-sm font-bold text-gray-900 focus:ring-2 focus:ring-[#0073aa] outline-none bg-white"
+                        value={formData.header_fit}
+                        onChange={e => setFormData({...formData, header_fit: e.target.value as any})}
+                    >
+                        <option value="cover">Fill & Crop (Zoom)</option>
+                        <option value="contain">Fit to Width (Shrink)</option>
+                        <option value="none">Original / Center</option>
+                        <option value="scale-down">Auto-Shrink only</option>
+                    </select>
+                </div>
             </div>
 
             <div className="flex justify-end pt-10 border-t border-gray-100">

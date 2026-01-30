@@ -1,0 +1,123 @@
+
+import React, { useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import Sidebar from './Sidebar';
+import { supabase } from '../services/supabase';
+
+interface LayoutProps {
+  children: React.ReactNode;
+}
+
+const Layout: React.FC<LayoutProps> = ({ children }) => {
+  const location = useLocation();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [settings, setSettings] = useState({
+    title: 'Twenty Ten',
+    slogan: 'Just another WordPress theme',
+    header_image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&q=80&w=940&h=200'
+  });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      // Auth check
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
+        if (profile?.role === 'admin' || profile?.role === 'editor') setIsAdmin(true);
+      }
+
+      // Site Settings
+      const { data: siteSettings } = await supabase.from('site_settings').select('*').eq('id', 1).maybeSingle();
+      if (siteSettings) {
+        setSettings({
+          title: siteSettings.title || 'Twenty Ten',
+          slogan: siteSettings.slogan || 'Just another WordPress theme',
+          header_image: siteSettings.header_image || 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&q=80&w=940&h=200'
+        });
+      }
+    };
+    fetchData();
+  }, [location.pathname]);
+
+  const getNavClass = (path: string) => {
+    const isActive = location.pathname === path;
+    const base = "px-6 py-4 inline-block text-[13px] font-black uppercase tracking-widest transition-colors ";
+    return isActive 
+      ? base + "text-white bg-[#1d2327]" 
+      : base + "text-gray-300 hover:text-white hover:bg-[#333]";
+  };
+
+  return (
+    <div className="min-h-screen bg-[#e9eaee] font-sans text-gray-800">
+      {/* Centered Wrapper */}
+      <div className="max-w-[940px] mx-auto bg-white shadow-xl min-h-screen border-x border-gray-200">
+        
+        {/* Site Identity Header */}
+        <header className="p-10 pt-16">
+          <Link to="/" className="inline-block group">
+            <h1 className="text-4xl font-black text-gray-900 leading-none mb-2 font-serif group-hover:text-blue-700 transition-colors">
+              {settings.title}
+            </h1>
+          </Link>
+          <p className="text-xs text-gray-500 italic uppercase tracking-widest font-bold">
+            {settings.slogan}
+          </p>
+        </header>
+
+        {/* Horizontal Navigation Menu */}
+        <nav className="bg-black border-y border-gray-800">
+          <div className="flex flex-wrap">
+            <Link to="/" className={getNavClass('/')}>Home</Link>
+            <Link to="/news" className={getNavClass('/news')}>News</Link>
+            {isAdmin && (
+              <Link to="/admin" className="px-6 py-4 inline-block text-[13px] font-black uppercase tracking-widest text-yellow-500 hover:bg-[#333]">
+                Admin
+              </Link>
+            )}
+          </div>
+        </nav>
+
+        {/* Global Header Image */}
+        <div className="p-6">
+          <div className="aspect-[94/20] overflow-hidden bg-gray-100 rounded-sm">
+            <img 
+              src={settings.header_image} 
+              alt="Site Header" 
+              className="w-full h-full object-cover"
+              onError={(e) => (e.target as HTMLImageElement).src = 'https://via.placeholder.com/940x200?text=Header+Image'}
+            />
+          </div>
+        </div>
+
+        {/* Main Content & Sidebar Layout */}
+        <div className="flex flex-col md:flex-row p-6 lg:p-10 gap-10">
+          
+          {/* Main Content Column */}
+          <main className="flex-1 min-w-0">
+            {children}
+          </main>
+
+          {/* Widgets Sidebar Column (Twenty Ten default right alignment) */}
+          <aside className="w-full md:w-[240px] shrink-0">
+            <Sidebar />
+          </aside>
+        </div>
+
+        {/* Footer */}
+        <footer className="mt-20 p-10 border-t border-gray-100 bg-gray-50/50">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">
+              Twenty Ten Theme Clone &copy; {new Date().getFullYear()}
+            </p>
+            <div className="flex gap-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+              <a href="#" className="hover:text-blue-600">Privacy</a>
+              <a href="#" className="hover:text-blue-600">Contact</a>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
+};
+
+export default Layout;

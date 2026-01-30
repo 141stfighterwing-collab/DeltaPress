@@ -1,0 +1,7 @@
+{
+  "name": "Twenty-Ten Personal Blog",
+  "description": "A high-performance personal blogging platform built with React, Tailwind, and Supabase, inspired by the classic Twenty Ten WordPress theme.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

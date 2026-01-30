@@ -176,7 +176,7 @@ const GenericListView: React.FC<Props> = ({ title, table, filterType }) => {
             </p>
           </div>
           
-          {canModify && (
+          {canModify && !isContactsTable && (
             <button 
               onClick={handleAddNew}
               className="bg-[#0073aa] text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest shadow-md hover:bg-[#005a87] transition-all active:scale-95"
@@ -203,22 +203,14 @@ const GenericListView: React.FC<Props> = ({ title, table, filterType }) => {
           ) : items.length === 0 && !error ? (
             <div className="p-20 text-center">
               <div className="text-4xl mb-4 grayscale opacity-20 text-gray-400">📭</div>
-              <p className="text-gray-400 font-serif italic text-sm mb-6">No {title.toLowerCase()} found in your account.</p>
-              {canModify && (
-                <button 
-                  onClick={handleAddNew}
-                  className="inline-block text-[10px] font-black uppercase text-blue-600 border border-blue-100 px-4 py-2 rounded hover:bg-blue-50 transition-colors"
-                >
-                  Create your first {title.slice(0, -1).toLowerCase()}
-                </button>
-              )}
+              <p className="text-gray-400 font-serif italic text-sm mb-6">No {title.toLowerCase()} found.</p>
             </div>
           ) : (
             <table className="w-full text-left">
               <thead className="bg-gray-50 border-b border-gray-200 text-[10px] uppercase text-gray-400 font-black tracking-widest">
                 <tr>
-                  <th className="px-6 py-4">Identity / Label</th>
-                  <th className="px-6 py-4">Created</th>
+                  <th className="px-6 py-4">{isContactsTable ? 'Message Content' : 'Identity / Label'}</th>
+                  <th className="px-6 py-4">Received</th>
                   <th className="px-6 py-4 text-right">Management</th>
                 </tr>
               </thead>
@@ -226,15 +218,17 @@ const GenericListView: React.FC<Props> = ({ title, table, filterType }) => {
                 {items.map((item) => (
                   <tr key={item.id} className="border-b hover:bg-gray-50 transition-colors group">
                     <td className="px-6 py-4">
-                      <div className="text-gray-800 font-serif italic text-[14px] leading-relaxed max-w-lg">
+                      <div className="text-gray-800 font-serif italic text-[14px] leading-relaxed max-w-2xl">
                         {item.content || item.message || item.name || item.title || 'Untitled'}
                       </div>
-                      <div className="text-[9px] text-gray-400 font-sans mt-1 uppercase font-black tracking-tighter flex items-center gap-2">
-                        {item.author_name || item.name || (item.user_id === user?.id ? 'You' : 'Member')}
+                      <div className="text-[9px] text-gray-400 font-sans mt-2 uppercase font-black tracking-tighter flex flex-wrap items-center gap-2">
+                        <span className="text-gray-900 font-black">{item.name || item.author_name || 'Anonymous'}</span>
+                        {item.email && <span className="bg-gray-100 px-2 py-0.5 rounded text-blue-600">✉️ {item.email}</span>}
+                        {item.phone && <span className="bg-gray-100 px-2 py-0.5 rounded text-green-600">📞 {item.phone}</span>}
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                        <span className="text-[10px] text-gray-400 font-bold uppercase">
+                        <span className="text-[10px] text-gray-400 font-bold uppercase whitespace-nowrap">
                             {item.created_at ? new Date(item.created_at).toLocaleDateString() : '—'}
                         </span>
                     </td>

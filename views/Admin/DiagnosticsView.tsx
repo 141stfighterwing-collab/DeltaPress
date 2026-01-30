@@ -22,8 +22,8 @@ const DiagnosticsView: React.FC = () => {
   const [showSql, setShowSql] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
 
-  const sqlFix = `-- 🚀 TWENTY TEN - SUPREME SCHEMA REPAIR V6 (BOT PERSONA UPDATE)
--- RUN THIS IN YOUR SUPABASE SQL EDITOR:
+  const sqlFix = `-- 🚀 TWENTY TEN - SUPREME SCHEMA REPAIR V8 (ROBUST CONTACTS)
+-- RUN THIS IN YOUR SUPABASE SQL EDITOR TO FIX THE 'PHONE' COLUMN ERROR:
 
 -- 1. HARDEN CATEGORIES
 CREATE TABLE IF NOT EXISTS public.categories (
@@ -46,13 +46,26 @@ CREATE TABLE IF NOT EXISTS public.journalists (
   gender TEXT DEFAULT 'female',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
-ALTER TABLE public.journalists ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT 'female';
-ALTER TABLE public.journalists ADD COLUMN IF NOT EXISTS perspective INTEGER DEFAULT 0;
 
 -- 3. HARDEN POSTS (AUTHORSHIP)
 ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS journalist_id UUID REFERENCES public.journalists(id);
 
--- 4. HARDEN SITE SETTINGS
+-- 4. HARDEN CONTACTS (MESSAGES FOR ADMINS)
+-- Explicitly creating table AND ensuring columns exist if table was previously created incomplete
+CREATE TABLE IF NOT EXISTS public.contacts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT,
+  message TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS message TEXT;
+
+-- 5. HARDEN SITE SETTINGS
 CREATE TABLE IF NOT EXISTS public.site_settings (
   id INTEGER PRIMARY KEY DEFAULT 1,
   title TEXT DEFAULT 'Twenty Ten',
@@ -67,35 +80,39 @@ CREATE TABLE IF NOT EXISTS public.site_settings (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. RESET PERMISSIONS
+-- 6. RESET PERMISSIONS
 ALTER TABLE public.categories DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_settings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.posts DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.journalists DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.contacts DISABLE ROW LEVEL SECURITY;
 
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.journalists ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.contacts ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Full Access" ON public.categories;
 DROP POLICY IF EXISTS "Full Settings Access" ON public.site_settings;
 DROP POLICY IF EXISTS "Full Post Access" ON public.posts;
 DROP POLICY IF EXISTS "Full Bot Access" ON public.journalists;
+DROP POLICY IF EXISTS "Full Contact Access" ON public.contacts;
 
 CREATE POLICY "Full Access" ON public.categories FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Full Settings Access" ON public.site_settings FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Full Post Access" ON public.posts FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Full Bot Access" ON public.journalists FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Full Contact Access" ON public.contacts FOR ALL USING (true) WITH CHECK (true);
 
--- 6. GRANT ACCESS
+-- 7. GRANT ACCESS
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, postgres, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, postgres, service_role;
 GRANT ALL ON SCHEMA public TO anon, authenticated, postgres, service_role;
 
--- 7. INITIAL DATA SEED
+-- 8. INITIAL DATA SEED
 INSERT INTO public.site_settings (id, title, slogan)
-VALUES (1, 'The Vanguard Collective', 'World News & Ideological Analysis')
+VALUES (1, 'Nathan C Vanguard', 'World News & Ideological Analysis')
 ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, slogan = EXCLUDED.slogan;
 
 INSERT INTO public.categories (name, slug)
@@ -223,8 +240,8 @@ ON CONFLICT DO NOTHING;`;
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 bg-red-50 text-red-600 rounded flex items-center justify-center text-xl">🛠️</div>
                   <div>
-                    <h3 className="text-sm font-black text-red-600 uppercase tracking-widest">SUPREME REPAIR V6</h3>
-                    <p className="text-[10px] text-gray-400 uppercase font-bold">Bot Personas & Authorship</p>
+                    <h3 className="text-sm font-black text-red-600 uppercase tracking-widest">SUPREME REPAIR V8</h3>
+                    <p className="text-[10px] text-gray-400 uppercase font-bold">Contacts & Messages System</p>
                   </div>
                 </div>
                 <div className="relative">
@@ -233,6 +250,9 @@ ON CONFLICT DO NOTHING;`;
                   </pre>
                   <button onClick={() => { navigator.clipboard.writeText(sqlFix); alert("Copied!"); }} className="absolute top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded text-[10px] font-black uppercase shadow-lg">Copy SQL</button>
                 </div>
+                <p className="mt-4 text-[10px] font-bold text-gray-500 uppercase leading-relaxed italic">
+                  * Note: After running this in Supabase, the 'phone' column error in the Contact form will be resolved.
+                </p>
               </div>
             ) : (
               <div className="bg-[#1e1e1e] text-[#d4d4d4] font-mono p-6 rounded shadow-2xl border border-gray-800 h-[500px] overflow-y-auto">

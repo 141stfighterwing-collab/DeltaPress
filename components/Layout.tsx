@@ -83,6 +83,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="flex flex-wrap">
             <Link to="/" className={getNavClass('/')}>Home</Link>
             <Link to="/news" className={getNavClass('/news')}>News</Link>
+            <Link to="/contact" className={getNavClass('/contact')}>Contact</Link>
             
             {navPages.map((page, idx) => (
               <Link 
@@ -129,11 +130,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <footer className="mt-20 p-10 border-t border-gray-100 bg-gray-50/50">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">
-              Twenty Ten Theme Clone &copy; {new Date().getFullYear()}
+              Nathan C &copy; {new Date().getFullYear()}
             </p>
             <div className="flex gap-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              <a href="#" className="hover:text-blue-600">Privacy</a>
-              <a href="#" className="hover:text-blue-600">Contact</a>
+              <Link to="/contact" className="hover:text-blue-600">Privacy</Link>
+              <Link to="/contact" className="hover:text-blue-600">Contact</Link>
             </div>
           </div>
         </footer>

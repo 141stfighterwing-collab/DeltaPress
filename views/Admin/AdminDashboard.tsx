@@ -16,6 +16,7 @@ const AdminDashboard: React.FC = () => {
     pages: 0,
     comments: 0,
     pending: 0,
+    messages: 0,
     health: 'Good'
   });
 
@@ -34,12 +35,20 @@ const AdminDashboard: React.FC = () => {
       const { count: pageCount } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'page');
       const { count: commentCount } = await commentQuery;
       const { count: pendingCount } = await pendingQuery;
+      
+      // Admins and Editors see total contact messages
+      let messageCount = 0;
+      if (['admin', 'editor'].includes(userRole)) {
+        const { count: msgCount } = await supabase.from('contacts').select('*', { count: 'exact', head: true });
+        messageCount = msgCount || 0;
+      }
 
       setStats({
         posts: postCount || 0,
         pages: pageCount || 0,
         comments: commentCount || 0,
         pending: pendingCount || 0,
+        messages: messageCount,
         health: 'Good'
       });
     } catch (err) {
@@ -111,15 +120,24 @@ const AdminDashboard: React.FC = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
           <div className="bg-white p-6 border border-gray-200 shadow-sm rounded-lg flex flex-col justify-center">
             <h3 className="text-[10px] uppercase font-black text-gray-400 tracking-widest mb-2">My Comments</h3>
             <div className="text-4xl font-black text-gray-900">{stats.comments}</div>
           </div>
+          
+          {isStaff && (
+             <Link to="/admin/messages" className="bg-white p-6 border border-gray-200 shadow-sm rounded-lg flex flex-col justify-center hover:bg-gray-50 transition-colors group">
+              <h3 className="text-[10px] uppercase font-black text-gray-400 tracking-widest mb-2 group-hover:text-blue-600">Contact Messages</h3>
+              <div className="text-4xl font-black text-gray-900 group-hover:text-blue-600">{stats.messages}</div>
+            </Link>
+          )}
+
           <div className="bg-white p-6 border border-gray-200 shadow-sm rounded-lg flex flex-col justify-center">
             <h3 className="text-[10px] uppercase font-black text-gray-400 tracking-widest mb-2">Awaiting Reply</h3>
             <div className={`text-4xl font-black ${stats.pending > 0 ? 'text-blue-600' : 'text-gray-200'}`}>{stats.pending}</div>
           </div>
+          
           <div className="bg-white p-6 border border-gray-200 shadow-sm rounded-lg flex flex-col justify-center">
             <h3 className="text-[10px] uppercase font-black text-gray-400 tracking-widest mb-2">Site Status</h3>
             <div className={`text-4xl font-black ${stats.health === 'Good' ? 'text-green-500' : 'text-red-500'}`}>{stats.health}</div>

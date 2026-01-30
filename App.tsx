@@ -6,6 +6,7 @@ import BlogHome from './views/BlogHome';
 import SinglePost from './views/SinglePost';
 import Newsroom from './views/Newsroom';
 import NewsDetail from './views/NewsDetail';
+import ContactView from './views/ContactView';
 import Login from './views/Auth/Login';
 import Register from './views/Auth/Register';
 import AdminDashboard from './views/Admin/AdminDashboard';
@@ -34,6 +35,7 @@ const App: React.FC = () => {
         <Route path="/post/:slug" element={<SinglePost />} />
         <Route path="/news" element={<Newsroom />} />
         <Route path="/news/:url" element={<NewsDetail />} />
+        <Route path="/contact" element={<ContactView />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         
@@ -56,7 +58,7 @@ const App: React.FC = () => {
         <Route path="/admin/media" element={<GenericListView title="Media Library" table="media" />} />
         <Route path="/admin/pages" element={<GenericListView title="Pages" table="posts" filterType="page" />} />
         <Route path="/admin/comments" element={<GenericListView title="Comments" table="comments" />} />
-        <Route path="/admin/contact" element={<GenericListView title="Contact Messages" table="contacts" />} />
+        <Route path="/admin/messages" element={<GenericListView title="Messages" table="contacts" />} />
         <Route path="/admin/services" element={<GenericListView title="Services" table="services" />} />
         <Route path="/admin/partners" element={<GenericListView title="Partners" table="partners" />} />
         <Route path="/admin/plugins" element={<GenericListView title="Plugins" table="plugins" />} />

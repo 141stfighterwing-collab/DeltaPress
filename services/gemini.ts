@@ -1,9 +1,19 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+/**
+ * Resolve the API key from multiple possible environment variable aliases.
+ */
+const apiKey = process.env.API_KEY || (process.env as any).GEMINI_KEY || (process.env as any).VITE_GEMINI_API_KEY;
 
 export async function generateBlogPostDraft(topic: string) {
+  if (!apiKey) {
+    console.error("Gemini API key is missing. Check your Vercel Environment Variables.");
+    return "Error: Gemini API key is not configured in the environment.";
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+  
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',

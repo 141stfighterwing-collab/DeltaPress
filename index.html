@@ -13,18 +13,17 @@
         body {
             font-family: 'Helvetica Neue', Arial, Helvetica, 'Nimbus Sans L', sans-serif;
             background-color: #f1f1f1;
-            color: #111; /* Darker text for better legibility */
+            color: #111;
         }
         h1, h2, h3, .serif {
             font-family: 'Libre Baskerville', serif;
         }
-        /* Advanced Formatting Support */
         .wp-entry-content {
             white-space: pre-wrap;
             word-wrap: break-word;
             line-height: 1.8;
             font-size: 1.1rem;
-            color: #1a1a1a; /* High contrast black */
+            color: #1a1a1a;
         }
         .wp-entry-content p {
             margin-bottom: 1.6rem;
@@ -41,8 +40,6 @@
             background: #f8fbfd;
             border-radius: 0 4px 4px 0;
         }
-
-        /* Standard HTML5 Media Controls - High Visibility */
         .wp-entry-content audio {
             width: 100%;
             margin: 2.5rem 0;
@@ -70,8 +67,6 @@
             border-radius: 8px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.08);
         }
-        
-        /* Custom scrollbar */
         ::-webkit-scrollbar { width: 10px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #bbb; border-radius: 5px; }
@@ -92,5 +87,10 @@
 </head>
 <body>
     <div id="root"></div>
+    <!-- 
+      The entry point for Vite projects must be explicitly defined as a module. 
+      This prevents the blank page issue on deployment.
+    -->
+    <script type="module" src="./index.tsx"></script>
 </body>
 </html>

@@ -1,20 +1,19 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-/**
- * ENVIRONMENT VARIABLE RESOLUTION:
- * Prioritizes standard Vercel/Supabase naming, then falls back to project-specific keys
- * as seen in the user's deployment screenshot.
- */
-const supabaseUrl = 
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 
-  process.env.SUPABASE_URL || 
-  'https://cngpbsjleyvcdscdffjg.supabase.co';
+// Defensive check for the browser environment
+const getEnv = (key: string, fallback: string) => {
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key];
+  }
+  // Check window.process if the polyfill has run
+  if (typeof window !== 'undefined' && (window as any).process?.env?.[key]) {
+    return (window as any).process.env[key];
+  }
+  return fallback;
+};
 
-const supabaseKey = 
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || 
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
-  process.env.SUPABASE_ANON_KEY ||
-  'sb_publishable_iD9T5v51aNb8ZujsRrhiyg_CA5l2cXl';
+const supabaseUrl = getEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://cngpbsjleyvcdscdffjg.supabase.co');
+const supabaseKey = getEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY', 'sb_publishable_iD9T5v51aNb8ZujsRrhiyg_CA5l2cXl');
 
 export const supabase = createClient(supabaseUrl, supabaseKey);

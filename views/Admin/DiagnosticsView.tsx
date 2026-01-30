@@ -22,8 +22,8 @@ const DiagnosticsView: React.FC = () => {
   const [showSql, setShowSql] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
 
-  const sqlFix = `-- 🚀 TWENTY TEN - SUPREME SCHEMA REPAIR V8 (ROBUST CONTACTS)
--- RUN THIS IN YOUR SUPABASE SQL EDITOR TO FIX THE 'PHONE' COLUMN ERROR:
+  const sqlFix = `-- 🚀 TWENTY TEN - SUPREME SCHEMA REPAIR V9 (ULTIMATE CONTACTS FIX)
+-- RUN THIS IN YOUR SUPABASE SQL EDITOR TO RESOLVE ALL 'PHONE' COLUMN ERRORS:
 
 -- 1. HARDEN CATEGORIES
 CREATE TABLE IF NOT EXISTS public.categories (
@@ -50,20 +50,27 @@ CREATE TABLE IF NOT EXISTS public.journalists (
 -- 3. HARDEN POSTS (AUTHORSHIP)
 ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS journalist_id UUID REFERENCES public.journalists(id);
 
--- 4. HARDEN CONTACTS (MESSAGES FOR ADMINS)
--- Explicitly creating table AND ensuring columns exist if table was previously created incomplete
-CREATE TABLE IF NOT EXISTS public.contacts (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name TEXT NOT NULL,
-  email TEXT NOT NULL,
-  phone TEXT,
-  message TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS phone TEXT;
-ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS name TEXT;
-ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS email TEXT;
-ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS message TEXT;
+-- 4. NUCLEAR CONTACTS REPAIR
+-- This ensures the table and every required column exists.
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename  = 'contacts') THEN
+        CREATE TABLE public.contacts (
+            id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            phone TEXT,
+            message TEXT NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+    ELSE
+        ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS phone TEXT;
+        ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS name TEXT;
+        ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS email TEXT;
+        ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS message TEXT;
+        ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+    END IF;
+END $$;
 
 -- 5. HARDEN SITE SETTINGS
 CREATE TABLE IF NOT EXISTS public.site_settings (
@@ -240,7 +247,7 @@ ON CONFLICT DO NOTHING;`;
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 bg-red-50 text-red-600 rounded flex items-center justify-center text-xl">🛠️</div>
                   <div>
-                    <h3 className="text-sm font-black text-red-600 uppercase tracking-widest">SUPREME REPAIR V8</h3>
+                    <h3 className="text-sm font-black text-red-600 uppercase tracking-widest">SUPREME REPAIR V9</h3>
                     <p className="text-[10px] text-gray-400 uppercase font-bold">Contacts & Messages System</p>
                   </div>
                 </div>
@@ -250,9 +257,15 @@ ON CONFLICT DO NOTHING;`;
                   </pre>
                   <button onClick={() => { navigator.clipboard.writeText(sqlFix); alert("Copied!"); }} className="absolute top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded text-[10px] font-black uppercase shadow-lg">Copy SQL</button>
                 </div>
-                <p className="mt-4 text-[10px] font-bold text-gray-500 uppercase leading-relaxed italic">
-                  * Note: After running this in Supabase, the 'phone' column error in the Contact form will be resolved.
-                </p>
+                <div className="mt-6 bg-blue-50 p-4 rounded text-[11px] text-blue-800 leading-relaxed font-bold">
+                  <p className="mb-2 uppercase tracking-widest">⚠️ Important instructions:</p>
+                  <ol className="list-decimal list-inside space-y-1">
+                    <li>Copy the SQL script above.</li>
+                    <li>Go to your Supabase Dashboard &gt; SQL Editor.</li>
+                    <li>Paste and Run the script.</li>
+                    <li>IMPORTANT: If the 'phone' error persists, wait 60 seconds for the PostgREST cache to refresh.</li>
+                  </ol>
+                </div>
               </div>
             ) : (
               <div className="bg-[#1e1e1e] text-[#d4d4d4] font-mono p-6 rounded shadow-2xl border border-gray-800 h-[500px] overflow-y-auto">

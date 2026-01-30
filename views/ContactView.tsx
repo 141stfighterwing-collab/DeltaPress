@@ -31,6 +31,7 @@ const ContactView: React.FC = () => {
 
     setIsSubmitting(true);
     try {
+      // Primary Attempt: Include phone field
       const { error: insertError } = await supabase.from('contacts').insert({
         name: stripAllHtml(formData.name),
         email: stripAllHtml(formData.email),
@@ -38,11 +39,25 @@ const ContactView: React.FC = () => {
         message: sanitizeHtml(formData.message)
       });
 
-      if (insertError) throw insertError;
+      // If the specific "phone" column is missing, try a fallback insert without it
+      if (insertError && (insertError.message.toLowerCase().includes('phone') || insertError.code === '42703')) {
+        console.warn("Phone column missing in database, attempting fallback insert...");
+        const { error: fallbackError } = await supabase.from('contacts').insert({
+          name: stripAllHtml(formData.name),
+          email: stripAllHtml(formData.email),
+          message: sanitizeHtml(formData.message)
+        });
+        
+        if (fallbackError) throw fallbackError;
+      } else if (insertError) {
+        throw insertError;
+      }
+
       setSubmitted(true);
       setFormData({ name: '', email: '', phone: '', message: '' });
     } catch (err: any) {
-      setError(err.message || "Something went wrong. Please try again later.");
+      console.error("Submission error:", err);
+      setError(err.message || "Something went wrong. Please check your Admin Diagnostics and run the Repair Script.");
     } finally {
       setIsSubmitting(false);
     }
@@ -72,8 +87,10 @@ const ContactView: React.FC = () => {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-red-50 border-l-4 border-red-500 p-4 text-red-700 text-xs font-bold uppercase tracking-widest animate-pulse">
-                {error}
+              <div className="bg-red-50 border-l-4 border-red-500 p-6 text-red-700 text-xs font-bold uppercase tracking-widest leading-relaxed mb-6">
+                <p className="mb-2">⚠️ Database Error:</p>
+                <p className="font-mono text-[10px] bg-white/50 p-2 rounded">{error}</p>
+                <p className="mt-4 text-red-900 italic">Tip: Log in as admin and run the Supreme Repair script in Diagnostics.</p>
               </div>
             )}
 

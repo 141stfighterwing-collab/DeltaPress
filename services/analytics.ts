@@ -17,7 +17,8 @@ export const trackEvent = async (type: string, targetId?: string, metadata: any 
     const sessionId = getSessionId();
     const { data: { session } } = await supabase.auth.getSession();
     
-    await supabase.from('site_analytics').insert({
+    // Check if user is logged in for metadata
+    const analyticsPayload = {
       event_type: type,
       target_id: targetId,
       session_id: sessionId,
@@ -29,8 +30,15 @@ export const trackEvent = async (type: string, targetId?: string, metadata: any 
         screen_size: `${window.innerWidth}x${window.innerHeight}`,
         userAgent: navigator.userAgent
       }
-    });
+    };
+
+    const { error } = await supabase.from('site_analytics').insert(analyticsPayload);
+    if (error && error.code === '42P01') {
+       // Table doesn't exist yet, ignore silently to prevent crash
+       return;
+    }
   } catch (err) {
+    // Fail silently in development/setup phase
     console.debug('Analytics capture skipped');
   }
 };

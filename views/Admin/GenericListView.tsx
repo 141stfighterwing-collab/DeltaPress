@@ -25,7 +25,7 @@ const GenericListView: React.FC<Props> = ({ title, table, filterType }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isCommentsTable = table === 'comments';
+  const isCommentsTable = table === 'comments' || table === 'news_comments';
 
   const fetchItems = async () => {
     setLoading(true);
@@ -33,7 +33,7 @@ const GenericListView: React.FC<Props> = ({ title, table, filterType }) => {
     try {
       let query = supabase.from(table).select('*');
       
-      const tablesWithDates = ['posts', 'comments', 'profiles', 'projects', 'media', 'contacts', 'services', 'partners', 'plugins', 'tools'];
+      const tablesWithDates = ['posts', 'comments', 'news_comments', 'profiles', 'projects', 'media', 'contacts', 'services', 'partners', 'plugins', 'tools'];
       if (tablesWithDates.includes(table)) {
         query = query.order('created_at', { ascending: false });
       }
@@ -178,58 +178,64 @@ const GenericListView: React.FC<Props> = ({ title, table, filterType }) => {
               <div className="p-20 text-center text-gray-400 italic">Fetching data...</div>
             ) : items.length === 0 ? (
               <div className="p-20 text-center">
-                <div className="text-4xl mb-4">📭</div>
+                <div className="text-4xl mb-4 text-gray-200">📭</div>
                 <p className="text-gray-400 font-serif">No {title.toLowerCase()} found.</p>
               </div>
             ) : (
               <table className="w-full text-left">
-                <thead className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-400 font-bold tracking-wider">
+                <thead className="bg-gray-50 border-b border-gray-200 text-[10px] uppercase text-gray-400 font-black tracking-widest">
                   <tr>
-                    <th className="px-6 py-4">{isCommentsTable ? 'Comment' : 'Name / Title'}</th>
-                    <th className="px-6 py-4">{isCommentsTable ? 'Author' : 'Status / Details'}</th>
+                    <th className="px-6 py-4">{isCommentsTable ? 'Comment Content' : 'Name / Title'}</th>
+                    <th className="px-6 py-4">{isCommentsTable ? 'Author Profile' : 'Status / Details'}</th>
                     <th className="px-6 py-4">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="text-sm">
                   {items.map((item) => (
-                    <tr key={item.id} className="border-b hover:bg-gray-50 transition-colors">
+                    <tr key={item.id} className="border-b hover:bg-gray-50 transition-colors group">
                       <td className="px-6 py-4">
                         {isCommentsTable ? (
-                          <div className="flex gap-3">
-                            <span className="text-gray-300 mt-1">💬</span>
-                            <div className="text-gray-800 font-serif italic max-w-xl line-clamp-2">
+                          <div className="flex gap-4">
+                            <span className="text-gray-200 mt-1 shrink-0">💬</span>
+                            <div className="text-gray-800 font-serif italic text-[13px] leading-relaxed border-l-2 border-gray-100 pl-4">
                               "{item.content}"
+                              {item.article_title && (
+                                <div className="text-[9px] text-blue-500 font-sans font-bold uppercase tracking-tighter mt-1 not-italic">
+                                  On News: {item.article_title}
+                                </div>
+                              )}
                             </div>
                           </div>
                         ) : (
-                          <div className="font-bold text-blue-600">
+                          <div className="font-bold text-blue-600 hover:underline cursor-pointer">
                             {item.name || item.title || item.subject || 'Untitled'}
                           </div>
                         )}
                       </td>
                       <td className="px-6 py-4">
                         {isCommentsTable ? (
-                          <div>
-                            <div className="font-bold text-gray-900">{item.author_name}</div>
-                            <div className="text-[10px] text-gray-400 font-mono">{item.author_email}</div>
+                          <div className="flex flex-col">
+                            <div className="font-black text-gray-900 text-xs">{item.author_name}</div>
+                            <div className="text-[10px] text-gray-400 font-mono tracking-tighter truncate max-w-[150px]">{item.author_email}</div>
+                            <div className="text-[9px] text-gray-300 mt-0.5">{new Date(item.created_at).toLocaleDateString()}</div>
                           </div>
                         ) : (
-                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-bold uppercase tracking-tighter">
+                          <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded font-black uppercase tracking-widest">
                             {item.status || 'Active'}
                           </span>
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex gap-4">
+                        <div className="flex gap-4 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button 
                             onClick={() => handleEdit(item)}
-                            className="text-blue-600 hover:text-blue-800 text-xs font-bold"
+                            className="text-blue-600 hover:text-blue-800 text-[10px] font-black uppercase tracking-widest"
                           >
                             Edit
                           </button>
                           <button 
                             onClick={() => handleDelete(item.id)}
-                            className="text-red-500 hover:text-red-700 text-xs font-bold"
+                            className="text-red-500 hover:text-red-700 text-[10px] font-black uppercase tracking-widest"
                           >
                             Delete
                           </button>
@@ -250,17 +256,17 @@ const GenericListView: React.FC<Props> = ({ title, table, filterType }) => {
           <div className="bg-white rounded-lg p-8 max-w-lg w-full shadow-2xl">
             <h2 className="text-xl font-bold mb-4 font-serif text-gray-800">Edit {isCommentsTable ? 'Comment' : 'Item'}</h2>
             <textarea 
-              className="w-full border p-4 rounded min-h-[150px] outline-none focus:ring-2 focus:ring-[#0073aa] transition-all font-serif text-gray-800"
+              className="w-full border border-gray-300 p-4 rounded min-h-[150px] outline-none focus:ring-2 focus:ring-[#0073aa] transition-all font-serif text-gray-800 bg-[#fdfdfd]"
               value={editItemValue}
               onChange={(e) => setEditItemValue(e.target.value)}
               autoFocus
             />
             <div className="flex justify-end gap-3 mt-6">
-              <button onClick={() => setShowEditModal(false)} className="px-4 py-2 text-gray-400 font-bold">Cancel</button>
+              <button onClick={() => setShowEditModal(false)} className="px-4 py-2 text-gray-400 font-bold text-xs uppercase tracking-widest">Cancel</button>
               <button 
                 onClick={handleUpdateItem}
                 disabled={isSaving}
-                className="bg-[#0073aa] text-white px-6 py-2 rounded font-bold hover:bg-[#005a87] disabled:opacity-50 shadow-md transition-all active:scale-95"
+                className="bg-[#0073aa] text-white px-6 py-2 rounded font-bold hover:bg-[#005a87] disabled:opacity-50 shadow-md transition-all active:scale-95 text-xs uppercase tracking-widest"
               >
                 {isSaving ? 'Saving...' : 'Update Record'}
               </button>
@@ -269,25 +275,25 @@ const GenericListView: React.FC<Props> = ({ title, table, filterType }) => {
         </div>
       )}
 
-      {/* Quick Add Modal (Not for comments) */}
+      {/* Quick Add Modal */}
       {showAddModal && !isCommentsTable && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100] backdrop-blur-sm">
-          <div className="bg-white rounded-lg p-8 max-w-sm w-full shadow-2xl">
+          <div className="bg-white rounded-lg p-8 max-w-sm w-full shadow-2xl border border-gray-100">
             <h2 className="text-xl font-bold mb-4 font-serif text-gray-800">New {title.replace(/s$/, '')}</h2>
             <input 
               type="text" 
-              className="w-full border p-3 rounded outline-none focus:ring-2 focus:ring-[#0073aa] mb-4" 
+              className="w-full border border-gray-300 p-3 rounded outline-none focus:ring-2 focus:ring-[#0073aa] mb-4 text-gray-900" 
               placeholder="Enter name..."
               value={newItemValue}
               onChange={(e) => setNewItemValue(e.target.value)}
               autoFocus
             />
             <div className="flex justify-end gap-3">
-              <button onClick={() => setShowAddModal(false)} className="px-4 py-2 text-gray-400 font-bold">Cancel</button>
+              <button onClick={() => setShowAddModal(false)} className="px-4 py-2 text-gray-400 font-bold text-xs uppercase tracking-widest">Cancel</button>
               <button 
                 onClick={handleSaveNewItem}
                 disabled={isSaving || !newItemValue}
-                className="bg-[#0073aa] text-white px-6 py-2 rounded font-bold hover:bg-[#005a87] transition-all shadow-md active:scale-95"
+                className="bg-[#0073aa] text-white px-6 py-2 rounded font-bold hover:bg-[#005a87] transition-all shadow-md active:scale-95 text-xs uppercase tracking-widest"
               >
                 {isSaving ? 'Saving...' : 'Add Record'}
               </button>

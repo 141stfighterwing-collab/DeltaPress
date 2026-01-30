@@ -7,6 +7,7 @@ import { supabase } from '../services/supabase';
 const SinglePost: React.FC = () => {
   const { slug } = useParams();
   const [post, setPost] = useState<any>(null);
+  const [categoryName, setCategoryName] = useState('General');
   const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [commentName, setCommentName] = useState('');
@@ -20,6 +21,13 @@ const SinglePost: React.FC = () => {
       const { data: postData } = await supabase.from('posts').select('*').eq('slug', slug).single();
       if (postData) {
         setPost(postData);
+        
+        // Fetch Category Name
+        if (postData.category_id) {
+          const { data: cat } = await supabase.from('categories').select('name').eq('id', postData.category_id).maybeSingle();
+          if (cat) setCategoryName(cat.name);
+        }
+
         const { data: comms } = await supabase.from('comments').select('*').eq('post_id', postData.id).order('created_at', { ascending: true });
         if (comms) setComments(comms);
       }
@@ -65,8 +73,10 @@ const SinglePost: React.FC = () => {
           <h1 className="text-4xl lg:text-5xl font-black mb-6 text-gray-900 leading-tight font-serif">
             {post.title}
           </h1>
-          <div className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">
-            {new Date(post.created_at).toLocaleDateString()}
+          <div className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] flex items-center gap-3">
+            <span>{new Date(post.created_at).toLocaleDateString()}</span>
+            <span>•</span>
+            <span className="text-[#72aee6] font-black">{categoryName}</span>
           </div>
         </header>
 

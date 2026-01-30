@@ -31,6 +31,7 @@ const JournalistsView: React.FC = () => {
   const [isDeploying, setIsDeploying] = useState<string | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [editingBot, setEditingBot] = useState<Bot | null>(null);
+  const [moderationEnabled, setModerationEnabled] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -42,7 +43,13 @@ const JournalistsView: React.FC = () => {
 
   useEffect(() => {
     fetchBots();
+    fetchModerationStatus();
   }, []);
+
+  const fetchModerationStatus = async () => {
+    const { data } = await supabase.from('site_settings').select('content_moderation').eq('id', 1).maybeSingle();
+    if (data) setModerationEnabled(data.content_moderation);
+  };
 
   const fetchBots = async () => {
     setLoading(true);
@@ -50,7 +57,6 @@ const JournalistsView: React.FC = () => {
     if (!error && data && data.length > 0) {
       setBots(data);
     } else {
-      // Fallback for demo if table doesn't exist
       setBots([
         { id: '1', name: 'TechCruncher-AI', niche: 'Silicon Valley Startups', category: 'Technology', schedule: '12h', status: 'active', last_run: '2023-10-27T10:00:00Z' },
         { id: '2', name: 'Health-Bot', niche: 'Nutrition & Biohacking', category: 'Health', schedule: '24h', status: 'active', last_run: null }
@@ -89,19 +95,14 @@ const JournalistsView: React.FC = () => {
 
     try {
       if (editingBot) {
-        // Update
         const { error } = await supabase.from('journalists').update(payload).eq('id', editingBot.id);
-        // If table doesn't exist, we just update local state for the demo
         if (error && error.code !== '42P01') throw error;
-        
         setBots(prev => prev.map(b => b.id === editingBot.id ? { ...b, ...payload } : b));
         alert(`${payload.name} configuration updated.`);
       } else {
-        // Create
         const newId = Math.random().toString(36).substr(2, 9);
         const { error } = await supabase.from('journalists').insert({ id: newId, ...payload });
         if (error && error.code !== '42P01') throw error;
-
         setBots(prev => [...prev, { id: newId, ...payload as any }]);
         alert(`New journalist ${payload.name} activated!`);
       }
@@ -116,9 +117,15 @@ const JournalistsView: React.FC = () => {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       
+      const moderationPrompt = moderationEnabled 
+        ? "STRICTLY avoid any adult content, pornography, gambling links, illegal substances, or violence. Content must be suitable for children and professional audiences." 
+        : "";
+
       const searchResponse = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Find 3 trending news titles about ${bot.niche} today. Pick the most engaging one and write a full SEO-friendly blog post title and content for it. Format as HTML. Use the category ${bot.category}.`,
+        contents: `Research trending topics about ${bot.niche}. ${moderationPrompt} 
+        Write a complete blog post in HTML format. Use <h1> for the title and <p> for paragraphs. 
+        Ensure the category is ${bot.category}. Focus on being informative and high-quality.`,
         config: {
           tools: [{ googleSearch: {} }]
         }
@@ -129,26 +136,28 @@ const JournalistsView: React.FC = () => {
       const cleanContent = fullText.replace(/<h1>.*?<\/h1>/, '');
 
       const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("No active session");
+
       const { error: postError } = await supabase.from('posts').insert({
         title,
         content: cleanContent,
         status: 'publish',
-        author_id: session?.user.id,
+        author_id: session.user.id,
         type: 'post',
-        category_id: bot.category, // Assuming category name as ID for simplicity
+        category_id: null, // Should link to category ID if available
         slug: title.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-') + '-' + Date.now()
       });
 
       if (postError) throw postError;
 
-      // Update last run
       const now = new Date().toISOString();
       await supabase.from('journalists').update({ last_run: now }).eq('id', bot.id);
       setBots(prev => prev.map(b => b.id === bot.id ? { ...b, last_run: now } : b));
 
-      alert(`Success! "${title}" has been published by ${bot.name} in category ${bot.category}.`);
+      alert(`Published! "${title}" by ${bot.name}.`);
     } catch (err: any) {
-      alert("Bot Execution Error: " + err.message);
+      console.error("Bot Error:", err);
+      alert("Bot Execution Error: " + (err.message || "Unknown error"));
     } finally {
       setIsDeploying(null);
     }
@@ -162,17 +171,22 @@ const JournalistsView: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-800 font-serif">AI Journalists</h1>
             <p className="text-gray-400 text-sm mt-1 italic">Automated content engines powered by Gemini.</p>
+            {moderationEnabled && (
+              <span className="inline-block mt-2 text-[10px] font-black uppercase tracking-widest text-green-600 bg-green-50 px-2 py-0.5 rounded">
+                🛡️ Safety Filters: ACTIVE
+              </span>
+            )}
           </div>
           <button 
             onClick={() => handleOpenModal()}
-            className="bg-gray-800 text-white px-6 py-2 rounded font-bold shadow hover:bg-black transition-all"
+            className="bg-gray-800 text-white px-6 py-2 rounded font-bold shadow-md hover:bg-black transition-all active:scale-95 text-xs uppercase tracking-widest"
           >
             Hire New Bot
           </button>
         </div>
 
         {loading ? (
-          <div className="text-center py-20 text-gray-400 italic">Accessing newsroom...</div>
+          <div className="text-center py-20 text-gray-400 italic font-serif">Accessing newsroom...</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {bots.map(bot => (
@@ -183,34 +197,30 @@ const JournalistsView: React.FC = () => {
                 
                 <div className="text-3xl mb-4">🤖</div>
                 <h3 className="text-xl font-bold text-gray-800 mb-1">{bot.name}</h3>
-                <p className="text-xs text-blue-600 font-black uppercase mb-4 tracking-widest">{bot.niche}</p>
+                <p className="text-[10px] text-blue-600 font-black uppercase mb-4 tracking-widest">{bot.niche}</p>
                 
-                <div className="space-y-2 mb-6">
+                <div className="space-y-2 mb-6 border-y border-gray-50 py-4">
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-400 font-medium">Category:</span>
+                    <span className="text-gray-400">Category:</span>
                     <span className="font-bold text-gray-700">{bot.category}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-400 font-medium">Frequency:</span>
+                    <span className="text-gray-400">Frequency:</span>
                     <span className="font-bold text-gray-700">{FREQUENCIES.find(f => f.id === bot.schedule)?.label || bot.schedule}</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400 font-medium">Last Run:</span>
-                    <span className="font-bold text-gray-700">{bot.last_run ? new Date(bot.last_run).toLocaleDateString() : 'Never'}</span>
                   </div>
                 </div>
 
-                <div className="flex gap-2 pt-4 border-t border-gray-50">
+                <div className="flex gap-2 pt-4">
                   <button 
                     onClick={() => handleRunBot(bot)}
                     disabled={!!isDeploying}
-                    className="flex-1 bg-blue-600 text-white py-2 rounded text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition-all shadow-sm"
+                    className="flex-1 bg-blue-600 text-white py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 transition-all shadow-sm"
                   >
-                    {isDeploying === bot.id ? 'Writing...' : 'Run Manually'}
+                    {isDeploying === bot.id ? 'Writing...' : 'Run Now'}
                   </button>
                   <button 
                     onClick={() => handleOpenModal(bot)}
-                    className="px-4 py-2 bg-gray-100 rounded text-xs font-bold text-gray-600 hover:bg-gray-200 transition-colors"
+                    className="px-4 py-2 bg-gray-100 rounded text-[10px] font-black uppercase tracking-widest text-gray-600 hover:bg-gray-200 transition-colors"
                   >
                     Settings
                   </button>
@@ -234,27 +244,27 @@ const JournalistsView: React.FC = () => {
                   <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1 tracking-wider">Bot Identity</label>
                   <input 
                     type="text" 
-                    className="w-full border p-2 rounded outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm" 
+                    className="w-full border p-3 rounded outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm text-gray-900 bg-[#fdfdfd]" 
                     placeholder="e.g. TrendBot 5000"
                     value={formData.name}
                     onChange={e => setFormData({ ...formData, name: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1 tracking-wider">Topic Niche (Be specific)</label>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1 tracking-wider">Topic Niche</label>
                   <input 
                     type="text" 
-                    className="w-full border p-2 rounded outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm" 
-                    placeholder="e.g. Generative AI in Healthcare"
+                    className="w-full border p-3 rounded outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm text-gray-900 bg-[#fdfdfd]" 
+                    placeholder="e.g. Artificial Intelligence"
                     value={formData.niche}
                     onChange={e => setFormData({ ...formData, niche: e.target.value })}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1 tracking-wider">Target Category</label>
+                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1 tracking-wider">Category</label>
                     <select 
-                      className="w-full border p-2 rounded text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      className="w-full border p-3 rounded text-sm bg-[#fdfdfd] outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                       value={formData.category}
                       onChange={e => setFormData({ ...formData, category: e.target.value })}
                     >
@@ -266,7 +276,7 @@ const JournalistsView: React.FC = () => {
                   <div>
                     <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1 tracking-wider">Schedule</label>
                     <select 
-                      className="w-full border p-2 rounded text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      className="w-full border p-3 rounded text-sm bg-[#fdfdfd] outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                       value={formData.schedule}
                       onChange={e => setFormData({ ...formData, schedule: e.target.value })}
                     >
@@ -278,7 +288,7 @@ const JournalistsView: React.FC = () => {
                 </div>
               </div>
               
-              <div className="flex justify-end gap-3 font-bold text-sm">
+              <div className="flex justify-end gap-3 font-bold text-xs uppercase tracking-widest">
                 <button 
                   onClick={() => setShowConfigModal(false)} 
                   className="text-gray-400 hover:text-gray-600 transition-colors py-2 px-4"
@@ -287,9 +297,9 @@ const JournalistsView: React.FC = () => {
                 </button>
                 <button 
                   onClick={handleSaveBot} 
-                  className="bg-gray-800 text-white px-8 py-2 rounded-lg hover:bg-black transition-all shadow-md active:scale-95"
+                  className="bg-[#0073aa] text-white px-8 py-2 rounded hover:bg-[#005a87] transition-all shadow-md active:scale-95"
                 >
-                  {editingBot ? 'Save Changes' : 'Deploy Journalist'}
+                  {editingBot ? 'Save Bot' : 'Hire Bot'}
                 </button>
               </div>
             </div>

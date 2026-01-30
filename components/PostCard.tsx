@@ -1,13 +1,35 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Post } from '../types';
+import { supabase } from '../services/supabase';
 
 interface PostCardProps {
   post: Post;
 }
 
 const PostCard: React.FC<PostCardProps> = ({ post }) => {
+  const [categoryName, setCategoryName] = useState('General');
+
+  useEffect(() => {
+    const fetchCategory = async () => {
+      if (post.category_id) {
+        const { data } = await supabase.from('categories').select('name').eq('id', post.category_id).maybeSingle();
+        if (data) setCategoryName(data.name);
+      }
+    };
+    fetchCategory();
+  }, [post.category_id]);
+
+  // Helper to get a preview without breaking HTML media tags
+  const getSafePreview = (html: string) => {
+    // If the content is short or has media, return more of it to ensure player visibility
+    if (html.length < 1000 || html.includes('<audio') || html.includes('<video') || html.includes('<iframe')) {
+      return html;
+    }
+    return html.substring(0, 450) + '...';
+  };
+
   return (
     <article className="mb-24 last:mb-0 group">
       <header className="mb-8">
@@ -19,7 +41,7 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
         <div className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] flex items-center gap-2">
           <span>{new Date(post.created_at).toLocaleDateString()}</span>
           <span>•</span>
-          <span className="text-[#72aee6]">Posted in General</span>
+          <span className="text-[#72aee6]">{categoryName}</span>
         </div>
       </header>
 
@@ -33,7 +55,7 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
         {post.excerpt ? (
           <p>{post.excerpt}</p>
         ) : (
-          <div dangerouslySetInnerHTML={{ __html: post.content.substring(0, 450) + '...' }} />
+          <div dangerouslySetInnerHTML={{ __html: getSafePreview(post.content) }} />
         )}
       </div>
 

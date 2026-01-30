@@ -10,12 +10,7 @@ const AdminDashboard: React.FC = () => {
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Quick Draft State
-  const [draftTitle, setDraftTitle] = useState('');
-  const [draftContent, setDraftContent] = useState('');
-  const [isSavingDraft, setIsSavingDraft] = useState(false);
-
-  // Dashboard Stats State
+  // Dashboard Stats
   const [stats, setStats] = useState({
     posts: 0,
     pages: 0,
@@ -24,12 +19,21 @@ const AdminDashboard: React.FC = () => {
     health: 'Good'
   });
 
-  const fetchStats = async () => {
+  const fetchStats = async (userRole: string, userId: string) => {
     try {
+      // Basic users only see their own stats for comments
+      let commentQuery = supabase.from('comments').select('*', { count: 'exact', head: true });
+      let pendingQuery = supabase.from('comments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+
+      if (['user', 'reviewer'].includes(userRole)) {
+        commentQuery = commentQuery.eq('user_id', userId);
+        pendingQuery = pendingQuery.eq('user_id', userId);
+      }
+
       const { count: postCount } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'post');
       const { count: pageCount } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'page');
-      const { count: commentCount } = await supabase.from('comments').select('*', { count: 'exact', head: true });
-      const { count: pendingCount } = await supabase.from('comments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+      const { count: commentCount } = await commentQuery;
+      const { count: pendingCount } = await pendingQuery;
 
       setStats({
         posts: postCount || 0,
@@ -39,8 +43,8 @@ const AdminDashboard: React.FC = () => {
         health: 'Good'
       });
     } catch (err) {
-      console.error("Error fetching stats:", err);
-      setStats(prev => ({ ...prev, health: 'Needs Attention' }));
+      console.error("Error fetching dashboard telemetry:", err);
+      setStats(prev => ({ ...prev, health: 'Degraded' }));
     }
   };
 
@@ -60,47 +64,14 @@ const AdminDashboard: React.FC = () => {
         .eq('id', session.user.id)
         .maybeSingle();
       
-      if (profile) {
-        setRole(profile.role);
-      }
+      const userRole = profile?.role || 'user';
+      setRole(userRole);
       
-      await fetchStats();
+      await fetchStats(userRole, session.user.id);
       setLoading(false);
     };
     checkUser();
   }, [navigate]);
-
-  const handleSaveDraft = async () => {
-    if (!draftTitle.trim()) {
-      alert("Please enter a title for your draft.");
-      return;
-    }
-
-    setIsSavingDraft(true);
-    try {
-      const slug = draftTitle.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-') + '-draft-' + Date.now();
-      const { error } = await supabase.from('posts').insert({
-        title: draftTitle,
-        content: draftContent,
-        slug,
-        status: 'draft',
-        type: 'post',
-        author_id: user.id
-      });
-
-      if (error) throw error;
-
-      // Clear fields and refresh stats
-      setDraftTitle('');
-      setDraftContent('');
-      await fetchStats();
-      alert("Draft saved successfully! You can find it in 'All Posts'.");
-    } catch (err: any) {
-      alert("Error saving draft: " + err.message);
-    } finally {
-      setIsSavingDraft(false);
-    }
-  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -108,92 +79,91 @@ const AdminDashboard: React.FC = () => {
   };
 
   if (loading) {
-    return <div className="flex h-screen items-center justify-center bg-[#f1f1f1] text-gray-500 italic">Verifying session...</div>;
+    return <div className="flex h-screen items-center justify-center bg-[#f1f1f1] text-gray-400 italic font-serif">Verifying identity...</div>;
   }
+
+  const isStaff = ['admin', 'editor'].includes(role || '');
 
   return (
     <div className="flex bg-[#f1f1f1] min-h-screen">
       <AdminSidebar onLogout={handleLogout} />
 
-      <main className="flex-1 p-6 lg:p-10">
+      <main className="flex-1 p-6 lg:p-10 max-w-7xl">
         <header className="flex justify-between items-center mb-10">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
-            <p className="text-gray-500">Welcome, {user?.user_metadata?.display_name || user?.email?.split('@')[0]}</p>
+            <h1 className="text-3xl font-bold text-gray-800 font-serif">Dashboard</h1>
+            <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-1">
+               Identity: {role} • {user?.email}
+            </p>
           </div>
-          <Link to="/" className="text-sm bg-white border border-gray-300 px-4 py-2 rounded shadow-sm hover:bg-gray-50 text-blue-600 font-semibold transition-all">
-            Visit Site
+          <Link to="/" className="text-[10px] font-black uppercase tracking-widest bg-white border border-gray-200 px-6 py-2 rounded shadow-sm hover:shadow transition-all text-blue-600">
+            View Live Site
           </Link>
         </header>
         
-        {role !== 'admin' && (
-          <div className="mb-8 p-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-700 text-sm">
-            <strong>Limited Access:</strong> You are logged in as a {role}. Only administrators can create or publish content.
+        {!isStaff && (
+          <div className="mb-10 p-6 bg-blue-50 border-l-4 border-blue-600 rounded-r-lg shadow-sm">
+            <h3 className="font-black text-blue-900 text-xs uppercase tracking-widest mb-1">Welcome to the Newsroom</h3>
+            <p className="text-blue-700 text-[13px] leading-relaxed">
+              Your account is active. You can manage your personal comments, update your display appearance, or contact the editorial team. 
+              {role === 'reviewer' ? ' You also have read-only access to all published posts.' : ''}
+            </p>
           </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <div className="bg-white p-6 border border-gray-200 shadow-sm rounded">
-            <h3 className="text-xs uppercase font-bold text-gray-400 tracking-widest mb-2">Total Content</h3>
-            <div className="text-4xl font-black text-gray-900">{stats.posts + stats.pages}</div>
+          <div className="bg-white p-6 border border-gray-200 shadow-sm rounded-lg flex flex-col justify-center">
+            <h3 className="text-[10px] uppercase font-black text-gray-400 tracking-widest mb-2">My Comments</h3>
+            <div className="text-4xl font-black text-gray-900">{stats.comments}</div>
           </div>
-          <div className="bg-white p-6 border border-gray-200 shadow-sm rounded">
-            <h3 className="text-xs uppercase font-bold text-gray-400 tracking-widest mb-2">Pending Moderation</h3>
-            <div className={`text-4xl font-black ${stats.pending > 0 ? 'text-blue-600' : 'text-gray-300'}`}>{stats.pending}</div>
+          <div className="bg-white p-6 border border-gray-200 shadow-sm rounded-lg flex flex-col justify-center">
+            <h3 className="text-[10px] uppercase font-black text-gray-400 tracking-widest mb-2">Awaiting Reply</h3>
+            <div className={`text-4xl font-black ${stats.pending > 0 ? 'text-blue-600' : 'text-gray-200'}`}>{stats.pending}</div>
           </div>
-          <div className="bg-white p-6 border border-gray-200 shadow-sm rounded">
-            <h3 className="text-xs uppercase font-bold text-gray-400 tracking-widest mb-2">Site Health</h3>
+          <div className="bg-white p-6 border border-gray-200 shadow-sm rounded-lg flex flex-col justify-center">
+            <h3 className="text-[10px] uppercase font-black text-gray-400 tracking-widest mb-2">Site Status</h3>
             <div className={`text-4xl font-black ${stats.health === 'Good' ? 'text-green-500' : 'text-red-500'}`}>{stats.health}</div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white border border-gray-200 shadow-sm rounded">
-            <div className="p-4 border-b border-gray-100 bg-gray-50 font-bold text-gray-700">At a Glance</div>
-            <div className="p-6 space-y-4 text-sm text-gray-600">
-              <p className="flex items-center justify-between">
-                <span>Posts</span>
-                <span className="font-bold">{stats.posts}</span>
-              </p>
-              <p className="flex items-center justify-between">
-                <span>Pages</span>
-                <span className="font-bold">{stats.pages}</span>
-              </p>
-              <p className="flex items-center justify-between">
-                <span>Comments</span>
-                <span className="font-bold">{stats.comments}</span>
-              </p>
-              <div className="pt-4 mt-4 border-t border-gray-50 text-gray-400 text-xs italic">
-                Twenty Ten theme running on WordPress-style Engine.
+          <div className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden">
+            <div className="p-4 border-b border-gray-50 bg-gray-50/50 font-black text-[10px] uppercase tracking-widest text-gray-500">System Inventory</div>
+            <div className="p-8 space-y-6">
+              <div className="flex items-center justify-between border-b border-gray-50 pb-4">
+                <div className="flex items-center gap-3">
+                   <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center">✍️</div>
+                   <span className="text-sm font-bold text-gray-800">Total Publications</span>
+                </div>
+                <span className="font-black text-gray-900 text-lg">{stats.posts}</span>
+              </div>
+              <div className="flex items-center justify-between border-b border-gray-50 pb-4">
+                <div className="flex items-center gap-3">
+                   <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center">📄</div>
+                   <span className="text-sm font-bold text-gray-800">Static Pages</span>
+                </div>
+                <span className="font-black text-gray-900 text-lg">{stats.pages}</span>
+              </div>
+              <div className="pt-2">
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest italic">
+                   Powered by Twenty Ten Blog Engine v1.0
+                </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white border border-gray-200 shadow-sm rounded">
-            <div className="p-4 border-b border-gray-100 bg-gray-50 font-bold text-gray-700">Quick Draft</div>
-            <div className="p-6 space-y-4">
-              <input 
-                type="text" 
-                placeholder="Title" 
-                className="w-full border border-gray-300 p-3 text-sm focus:border-blue-500 outline-none rounded bg-white text-gray-900 placeholder-gray-400" 
-                value={draftTitle}
-                onChange={(e) => setDraftTitle(e.target.value)}
-              />
-              <textarea 
-                placeholder="What's on your mind?" 
-                className="w-full border border-gray-300 p-3 text-sm focus:border-blue-500 outline-none rounded bg-white text-gray-900 placeholder-gray-400" 
-                rows={4}
-                value={draftContent}
-                onChange={(e) => setDraftContent(e.target.value)}
-              ></textarea>
-              <button 
-                onClick={handleSaveDraft}
-                disabled={role !== 'admin' || isSavingDraft}
-                className="bg-[#0073aa] text-white px-6 py-2 text-sm font-bold rounded hover:bg-[#005a87] transition-colors disabled:opacity-50 shadow-md active:scale-95"
-              >
-                {isSavingDraft ? 'Saving...' : role === 'admin' ? 'Save Draft' : 'Admin Only'}
-              </button>
-            </div>
+          <div className="bg-gray-900 rounded-lg shadow-2xl p-8 flex flex-col justify-center text-white relative overflow-hidden group">
+             <div className="absolute inset-0 bg-blue-600 opacity-0 group-hover:opacity-10 transition-opacity duration-700"></div>
+             <div className="relative z-10">
+                <h3 className="text-4xl font-black font-serif mb-4 leading-tight">Ready to join the conversation?</h3>
+                <p className="text-gray-400 text-sm leading-relaxed mb-8 max-w-sm">
+                  Visit the comments section to manage your existing thoughts or jump to the Appearance hub to customize your theme experience.
+                </p>
+                <div className="flex gap-4">
+                   <Link to="/admin/comments" className="bg-blue-600 text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg active:scale-95">Go to Comments</Link>
+                   <Link to="/admin/appearance" className="bg-white text-gray-900 px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 transition-all shadow-lg active:scale-95">Customizer</Link>
+                </div>
+             </div>
           </div>
         </div>
       </main>

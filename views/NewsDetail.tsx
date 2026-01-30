@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { supabase } from '../services/supabase';
+import { trackEvent } from '../services/analytics';
 
 const NewsDetail: React.FC = () => {
   const { url } = useParams();
@@ -40,7 +41,11 @@ const NewsDetail: React.FC = () => {
   };
 
   useEffect(() => {
-    if (decodedUrl) fetchComments();
+    if (decodedUrl) {
+      fetchComments();
+      // Track view of the news discussion thread
+      trackEvent('view', decodedUrl, { title: article.title, type: 'news' });
+    }
   }, [decodedUrl]);
 
   const handleSubmitComment = async (e: React.FormEvent) => {
@@ -67,6 +72,10 @@ const NewsDetail: React.FC = () => {
     }
   };
 
+  const handleOutboundLink = () => {
+    trackEvent('rss_outbound', decodedUrl, { title: article.title });
+  };
+
   return (
     <Layout>
       <div className="mb-10">
@@ -80,7 +89,13 @@ const NewsDetail: React.FC = () => {
           <p className="text-lg text-gray-600 font-serif italic mb-8 border-l-4 border-gray-50 pl-6 leading-relaxed">
             {article.description}
           </p>
-          <a href={decodedUrl} target="_blank" rel="noopener noreferrer" className="bg-[#1d2327] text-white px-8 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-md">
+          <a 
+            href={decodedUrl} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            onClick={handleOutboundLink}
+            className="bg-[#1d2327] text-white px-8 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-md"
+          >
             Read Original Story &rarr;
           </a>
         </header>

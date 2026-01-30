@@ -84,11 +84,24 @@ const AnalyticsView: React.FC = () => {
         }
       });
 
-      const performanceArray = Object.entries(postMetrics).map(([slug, m]) => ({
-        slug,
-        ...m,
-        ctr: m.clicks > 0 ? Math.round((m.views / m.clicks) * 100) : 0
-      })).sort((a, b) => b.views - a.views);
+      const performanceArray = Object.entries(postMetrics).map(([slug, m]) => {
+        // Correcting Conversion Logic: 
+        // Intent (Clicks) / Impressions (Views)
+        // If someone landed directly (0 clicks, 1 view), conversion is 0.
+        // If someone clicked but left (1 click, 0 views), conversion is effectively 100% intent.
+        let ctr = 0;
+        if (m.views > 0) {
+          ctr = Math.round((m.clicks / m.views) * 100);
+        } else if (m.clicks > 0) {
+          ctr = 100;
+        }
+
+        return {
+          slug,
+          ...m,
+          ctr: Math.min(100, ctr) // Max is 100%
+        };
+      }).sort((a, b) => b.views - a.views);
 
       const sortedReferrers = Object.entries(referMap)
         .map(([name, count]) => ({ name, count }))
@@ -135,8 +148,8 @@ const AnalyticsView: React.FC = () => {
           <div className="max-w-3xl mx-auto bg-white border border-red-200 rounded-lg shadow-sm">
             <div className="bg-red-600 text-white px-6 py-4 font-bold">Analytics Table Missing</div>
             <div className="p-8">
-              <p className="mb-4">Please run the SQL initialization script provided in the previous turn.</p>
-              <button onClick={fetchData} className="bg-black text-white px-6 py-2 rounded">Refresh</button>
+              <p className="mb-4">Please run the SQL initialization script provided in the diagnostics panel.</p>
+              <button onClick={fetchData} className="bg-black text-white px-6 py-2 rounded">Refresh Hub</button>
             </div>
           </div>
         </main>
@@ -169,7 +182,7 @@ const AnalyticsView: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
           {[
             { label: 'Total Views', val: stats.totalViews, sub: 'Page Openings', color: 'bg-blue-600', icon: '📄' },
-            { label: 'Feed Clicks', val: stats.totalClicks, sub: 'In-Site Engagement', color: 'bg-emerald-500', icon: '👆' },
+            { label: 'Internal Clicks', val: stats.totalClicks, sub: 'Navigation Events', color: 'bg-emerald-500', icon: '👆' },
             { label: 'Avg Stay', val: `${stats.avgSessionTime}m`, sub: 'Retention Time', color: 'bg-violet-600', icon: '⏱️' },
             { label: 'Outbound', val: stats.externalClicks, sub: 'RSS Link Clicks', color: 'bg-amber-500', icon: '🚀' }
           ].map((card, i) => (
@@ -218,7 +231,7 @@ const AnalyticsView: React.FC = () => {
                           <td className="px-6 py-4 text-right">
                             <div className="inline-flex items-center gap-2">
                               <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(100, p.ctr)}%` }}></div>
+                                <div className="h-full bg-blue-500 rounded-full" style={{ width: `${p.ctr}%` }}></div>
                               </div>
                               <span className="text-[11px] font-black text-blue-600">{p.ctr}%</span>
                             </div>
@@ -269,7 +282,7 @@ const AnalyticsView: React.FC = () => {
           <div className="space-y-8">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-6 py-4 bg-gray-50/50 border-b border-gray-50">
-                <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">Longest Active Sessions</h3>
+                <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">Active Sessions</h3>
               </div>
               <div className="p-6 space-y-6">
                 {stats.sessions.length === 0 ? (
@@ -297,7 +310,7 @@ const AnalyticsView: React.FC = () => {
             <div className="bg-blue-600 rounded-xl shadow-lg p-6 text-white text-center">
               <h4 className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-2">Longest Stay Record</h4>
               <div className="text-5xl font-black mb-1">{stats.longestSession}m</div>
-              <p className="text-xs font-bold opacity-80">Continuous Reading</p>
+              <p className="text-xs font-bold opacity-80">Continuous Engagement</p>
             </div>
           </div>
 

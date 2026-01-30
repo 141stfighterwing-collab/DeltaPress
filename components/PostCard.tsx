@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Post } from '../types';
 import { supabase } from '../services/supabase';
+import { trackEvent } from '../services/analytics';
 
 interface PostCardProps {
   post: Post;
@@ -21,6 +22,10 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
     fetchCategory();
   }, [post.category_id]);
 
+  const handleEngagement = () => {
+    trackEvent('click', post.slug, { title: post.title });
+  };
+
   // Helper to get a preview without breaking HTML media tags
   const getSafePreview = (html: string) => {
     // If the content is short or has media, return more of it to ensure player visibility
@@ -33,7 +38,11 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
   return (
     <article className="mb-24 last:mb-0 group">
       <header className="mb-8">
-        <Link to={`/post/${post.slug}`} className="hover:text-[#72aee6] transition-colors">
+        <Link 
+          to={`/post/${post.slug}`} 
+          onClick={handleEngagement}
+          className="hover:text-[#72aee6] transition-colors"
+        >
           <h2 className="text-3xl font-black mb-4 text-gray-900 leading-tight font-serif">
             {post.title}
           </h2>
@@ -60,7 +69,11 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
       </div>
 
       <footer className="mt-10 pt-6 border-t border-gray-50">
-        <Link to={`/post/${post.slug}`} className="text-[11px] font-black uppercase tracking-widest text-gray-900 hover:text-[#72aee6] transition-colors border-b-2 border-gray-900 hover:border-[#72aee6]">
+        <Link 
+          to={`/post/${post.slug}`} 
+          onClick={handleEngagement}
+          className="text-[11px] font-black uppercase tracking-widest text-gray-900 hover:text-[#72aee6] transition-colors border-b-2 border-gray-900 hover:border-[#72aee6]"
+        >
           Continue Reading &rarr;
         </Link>
       </footer>

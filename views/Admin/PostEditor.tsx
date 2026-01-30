@@ -61,6 +61,7 @@ const PostEditor: React.FC = () => {
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
       const allowedRoles = ['admin', 'editor'];
       if (!profile || !allowedRoles.includes(profile.role)) {
+        // Restricted Access: Reviewers and Users cannot edit.
         navigate('/admin');
         return;
       }

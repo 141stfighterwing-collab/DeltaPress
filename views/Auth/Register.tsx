@@ -25,13 +25,15 @@ const Register: React.FC = () => {
 
     try {
       // 1. Sign up user
+      // IMPORTANT: We pass 'username' in metadata. 
+      // The Database Trigger (from Diagnostics) will automatically create the profile row.
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            display_name: username,
-            username: username
+            username: username.toLowerCase(),
+            display_name: username
           }
         }
       });
@@ -39,20 +41,10 @@ const Register: React.FC = () => {
       if (signUpError) throw signUpError;
 
       if (data.user) {
-        // 2. Create profile entry with default role 'user'
-        const { error: profileError } = await supabase.from('profiles').insert({
-          id: data.user.id,
-          username: username,
-          display_name: username,
-          role: 'user'
-        });
-
-        if (profileError) {
-          console.warn("Profile creation failed, might exist already:", profileError);
-        }
-
+        // Success! We don't do a manual upsert here anymore.
+        // Doing so often causes RLS "42501" errors because the session isn't live yet.
         setSuccess(true);
-        setTimeout(() => navigate('/login'), 2000);
+        setTimeout(() => navigate('/login'), 2500);
       }
     } catch (err: any) {
       setError(err.message || 'Registration failed.');
@@ -68,19 +60,23 @@ const Register: React.FC = () => {
           <Link to="/" className="inline-block">
             <div className="w-16 h-16 bg-blue-600 rounded-lg mx-auto mb-4 flex items-center justify-center text-3xl font-bold text-white shadow-lg italic">W</div>
           </Link>
-          <h1 className="text-2xl font-bold text-gray-800">Create Account</h1>
+          <h1 className="text-2xl font-bold text-gray-800 font-serif">Create Account</h1>
           <p className="text-gray-500 text-sm mt-2">Join the newsroom community</p>
         </div>
 
         {error && (
-          <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 text-red-700 text-sm">
-            {error}
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 text-red-700 text-sm animate-in fade-in slide-in-from-top-2">
+            <h3 className="font-bold mb-1 uppercase text-[10px]">Registry Error</h3>
+            <p className="leading-relaxed">{error}</p>
+            <p className="mt-2 text-[9px] font-bold uppercase opacity-60">
+              Note: If this is a database error, please run the Repair Script in the Diagnostics Hub.
+            </p>
           </div>
         )}
 
         {success && (
-          <div className="bg-green-50 border-l-4 border-green-500 p-4 mb-6 text-green-700 text-sm">
-            Welcome aboard! Redirecting to login...
+          <div className="bg-green-50 border-l-4 border-green-500 p-4 mb-6 text-green-700 text-sm font-bold">
+            Account created! The database is setting up your profile. Redirecting to login...
           </div>
         )}
 

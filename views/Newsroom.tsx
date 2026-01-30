@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { supabase } from '../services/supabase';
+import { trackEvent } from '../services/analytics';
 
 interface RssArticle {
   title: string;
@@ -78,6 +79,10 @@ const Newsroom: React.FC = () => {
     fetchAllNews();
   }, []);
 
+  const handleArticleClick = (article: RssArticle) => {
+    trackEvent('click', article.link, { title: article.title, type: 'news' });
+  };
+
   return (
     <Layout>
       <header className="mb-12 border-b border-gray-100 pb-6 flex justify-between items-end">
@@ -108,6 +113,7 @@ const Newsroom: React.FC = () => {
               <Link 
                 to={`/news/${encodeURIComponent(article.link)}`} 
                 state={{ article }}
+                onClick={() => handleArticleClick(article)}
                 className="block group-hover:text-[#72aee6] transition-colors"
               >
                 <h2 className="text-3xl font-bold mb-4 leading-tight font-serif text-gray-900">
@@ -123,6 +129,7 @@ const Newsroom: React.FC = () => {
                 <Link 
                   to={`/news/${encodeURIComponent(article.link)}`}
                   state={{ article }}
+                  onClick={() => handleArticleClick(article)}
                   className="text-[11px] font-black uppercase tracking-widest text-[#72aee6] border-b-2 border-transparent hover:border-[#72aee6] transition-all"
                 >
                   Join Discussion &rarr;

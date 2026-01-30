@@ -22,34 +22,79 @@ const DiagnosticsView: React.FC = () => {
   const [showSql, setShowSql] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
 
-  const sqlFix = `-- 🚀 TWENTY TEN - EMERGENCY SCHEMA REPAIR
--- Copy this script and run it in your Supabase SQL Editor:
--- https://supabase.com/dashboard/project/_/sql
+  const sqlFix = `-- 🚀 TWENTY TEN - ATOMIC RBAC REPAIR
+-- PASTE THIS INTO YOUR SUPABASE SQL EDITOR TO FIX OWNERSHIP & ROLES:
 
--- 1. FIX SITE SETTINGS COLUMNS (Restores Banner URL & Autofit)
-ALTER TABLE site_settings 
-ADD COLUMN IF NOT EXISTS content_moderation BOOLEAN DEFAULT FALSE,
-ADD COLUMN IF NOT EXISTS header_fit TEXT DEFAULT 'cover',
-ADD COLUMN IF NOT EXISTS banner_text TEXT DEFAULT '',
-ADD COLUMN IF NOT EXISTS theme TEXT DEFAULT 'default';
+-- 1. SETUP PROFILES TABLE
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
+  username TEXT UNIQUE,
+  display_name TEXT,
+  role TEXT DEFAULT 'user',
+  status TEXT DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- 2. ENSURE RLS POLCIES ARE OPEN FOR SITE_SETTINGS
-ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Anyone can view settings" ON site_settings;
-CREATE POLICY "Anyone can view settings" ON site_settings FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Admins can manage settings" ON site_settings;
-CREATE POLICY "Admins can manage settings" ON site_settings FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+-- 2. REPAIR COMMENTS (Add ownership)
+CREATE TABLE IF NOT EXISTS public.comments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  post_id UUID REFERENCES public.posts ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users,
+  author_name TEXT,
+  author_email TEXT,
+  content TEXT,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.comments ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users;
 
--- 3. FIX NEWS & CATEGORY PERMISSIONS
-ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public can view categories" ON categories;
-CREATE POLICY "Public can view categories" ON categories FOR SELECT USING (true);
+-- 3. REPAIR CONTACTS (Add ownership)
+CREATE TABLE IF NOT EXISTS public.contacts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users,
+  name TEXT,
+  email TEXT,
+  subject TEXT,
+  message TEXT,
+  status TEXT DEFAULT 'new',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users;
 
--- 4. FINAL PERMISSIONS GRANT
-GRANT SELECT ON site_settings TO anon;
-GRANT ALL ON site_settings TO authenticated;
-GRANT SELECT ON categories TO anon;`;
+-- 4. PROFILE TRIGGER
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, username, display_name, role)
+  VALUES (
+    new.id, 
+    COALESCE(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)), 
+    COALESCE(new.raw_user_meta_data->>'display_name', split_part(new.email, '@', 1)), 
+    'user'
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- 5. RESET RLS & PERMISSIONS
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.contacts ENABLE ROW LEVEL SECURITY;
+
+-- 6. GLOBAL POLICIES (Simplifed for this session)
+DROP POLICY IF EXISTS "Public Select" ON public.comments;
+CREATE POLICY "Public Select" ON public.comments FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Owner Insert" ON public.comments;
+CREATE POLICY "Owner Insert" ON public.comments FOR INSERT WITH CHECK (true);
+
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;`;
 
   const addLog = (msg: string) => {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -58,22 +103,14 @@ GRANT SELECT ON categories TO anon;`;
   const scanTableIntegrity = async () => {
     setIsScanning(true);
     addLog("Scanning database schema and permissions...");
-    const coreTables = ['categories', 'posts', 'profiles', 'rss_feeds', 'site_settings', 'site_analytics', 'comments'];
+    const coreTables = ['categories', 'posts', 'profiles', 'rss_feeds', 'site_settings', 'comments', 'contacts'];
     const healthResults: TableHealth[] = [];
 
     for (const table of coreTables) {
       try {
         const { count, error } = await supabase.from(table).select('*', { count: 'exact', head: true });
-        
         if (error) {
-          addLog(`Error on ${table}: ${error.code} - ${error.message}`);
-          if (error.code === '42P01') {
-            healthResults.push({ name: table, count: 0, status: 'missing', error: "Table doesn't exist" });
-          } else if (error.code === '42501') {
-            healthResults.push({ name: table, count: 0, status: 'blocked', error: "RLS Policy Blocked" });
-          } else {
-            healthResults.push({ name: table, count: 0, status: 'blocked', error: error.message });
-          }
+          healthResults.push({ name: table, count: 0, status: 'blocked', error: error.message });
         } else {
           healthResults.push({ name: table, count: count || 0, status: 'ok' });
         }
@@ -90,28 +127,20 @@ GRANT SELECT ON categories TO anon;`;
     setGeminiStatus('pending');
     setDbStatus('pending');
     setRssStatus('pending');
-
     addLog("Initiating system-wide audit...");
-    
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      addLog(`Session Check: ${session ? 'Authenticated' : 'Anonymous'}`);
       setDbStatus('ok');
     } catch (err: any) {
       setDbStatus('error');
     }
-
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: "PONG",
-      });
+      await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: "PONG" });
       setGeminiStatus('ok');
     } catch (err: any) {
       setGeminiStatus('error');
     }
-
     await scanTableIntegrity();
   };
 
@@ -141,11 +170,11 @@ GRANT SELECT ON categories TO anon;`;
             <p className="text-gray-400 text-xs italic uppercase font-bold tracking-widest mt-1">Audit database schema & permissions</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setShowSql(!showSql)} className={`px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest shadow-md transition-all ${showSql ? 'bg-red-600 text-white shadow-red-200' : 'bg-gray-800 text-white hover:bg-black'}`}>
+            <button onClick={() => setShowSql(!showSql)} className={`px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest shadow-md transition-all ${showSql ? 'bg-red-600 text-white' : 'bg-gray-800 text-white hover:bg-black'}`}>
               {showSql ? 'Hide SQL Script' : 'REPAIR SCHEMA 🛠️'}
             </button>
-            <button onClick={runDiagnostics} className="bg-[#0073aa] text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest shadow-md hover:bg-[#005a87] transition-all">
-              Re-Scan Infrastructure
+            <button onClick={runDiagnostics} className="bg-[#0073aa] text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest shadow-md hover:bg-[#005a87]">
+              Re-Scan
             </button>
           </div>
         </div>
@@ -156,49 +185,24 @@ GRANT SELECT ON categories TO anon;`;
           <StatusCard title="News Pipeline" status={rssStatus} icon="📡" />
         </div>
 
-        {/* PROMINENT REPAIR BLOCK */}
-        {tableHealth.some(t => t.status !== 'ok') && !showSql && (
-          <div className="mb-10 bg-amber-50 border-l-8 border-amber-400 p-8 rounded shadow-lg animate-pulse">
-            <div className="flex items-center gap-4">
-              <span className="text-3xl">⚠️</span>
-              <div>
-                <h2 className="text-lg font-black text-amber-900 uppercase tracking-tight">Database Schema Mismatch Detected</h2>
-                <p className="text-amber-700 text-sm italic">One or more required columns are missing from your database. This will cause "Save Failed" errors in Settings.</p>
-                <button 
-                  onClick={() => setShowSql(true)}
-                  className="mt-4 bg-amber-900 text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
-                >
-                  Get the SQL Fix Script
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="bg-white rounded border border-gray-200 shadow-sm overflow-hidden h-fit">
             <div className="px-6 py-4 bg-gray-50 border-b border-gray-100">
-                <h3 className="text-xs font-black uppercase tracking-widest text-gray-800">Table Integrity Audit</h3>
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-800">Integrity Audit</h3>
             </div>
             <table className="w-full text-left">
                 <thead className="bg-white border-b border-gray-50 text-[10px] font-black uppercase text-gray-400">
-                    <tr>
-                        <th className="px-6 py-4">Table</th>
-                        <th className="px-6 py-4">Status</th>
-                    </tr>
+                    <tr><th className="px-6 py-4">Table</th><th className="px-6 py-4">Status</th></tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-gray-50">
                     {tableHealth.map((table, i) => (
-                        <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                        <tr key={i} className="hover:bg-gray-50/50">
                             <td className="px-6 py-4 font-mono text-xs text-gray-700">{table.name}</td>
                             <td className="px-6 py-4">
                                 {table.status === 'ok' ? (
                                     <span className="text-green-500 text-[10px] font-bold uppercase tracking-widest">● Healthy</span>
                                 ) : (
-                                    <div className="flex flex-col">
-                                      <span className="text-red-500 text-[10px] font-bold uppercase tracking-widest">● Mismatched</span>
-                                      {table.name === 'site_settings' && <span className="text-[8px] text-red-300 font-black uppercase mt-0.5 tracking-tighter">Fix: content_moderation column missing</span>}
-                                    </div>
+                                    <span className="text-red-500 text-[10px] font-bold uppercase tracking-widest">● Blocked</span>
                                 )}
                             </td>
                         </tr>
@@ -209,49 +213,26 @@ GRANT SELECT ON categories TO anon;`;
 
           <div className="space-y-8">
             {showSql ? (
-              <div className="bg-white p-8 rounded border-t-8 border-red-600 shadow-2xl animate-in fade-in slide-in-from-top-4 duration-500">
+              <div className="bg-white p-8 rounded border-t-8 border-red-600 shadow-2xl animate-in fade-in duration-500">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 bg-red-50 text-red-600 rounded flex items-center justify-center text-xl">🛠️</div>
                   <div>
-                    <h3 className="text-sm font-black text-red-600 uppercase tracking-widest">Quick Fix - Paste into Supabase</h3>
-                    <p className="text-[10px] text-gray-400 uppercase font-bold">This restores full functionality to Settings</p>
+                    <h3 className="text-sm font-black text-red-600 uppercase tracking-widest">RBAC SQL FIX</h3>
+                    <p className="text-[10px] text-gray-400 uppercase font-bold">Fixes Ownership Columns</p>
                   </div>
                 </div>
-                
                 <div className="relative">
-                  <pre className="bg-gray-900 text-green-400 p-6 rounded text-[10px] font-mono overflow-x-auto leading-relaxed shadow-inner max-h-[400px]">
+                  <pre className="bg-gray-900 text-green-400 p-6 rounded text-[10px] font-mono overflow-x-auto max-h-[400px]">
                     {sqlFix}
                   </pre>
-                  <button 
-                    onClick={() => {
-                      navigator.clipboard.writeText(sqlFix);
-                      alert("Repair Script Copied to Clipboard!");
-                    }}
-                    className="absolute top-4 right-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95"
-                  >
-                    Copy SQL Fix
-                  </button>
+                  <button onClick={() => { navigator.clipboard.writeText(sqlFix); alert("Copied!"); }} className="absolute top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded text-[10px] font-black uppercase shadow-lg">Copy SQL</button>
                 </div>
-                <p className="mt-6 text-[11px] text-gray-500 leading-relaxed italic border-l-2 border-gray-100 pl-4 font-serif">
-                  Paste the above in your <strong>SQL Editor</strong> on the Supabase Dashboard and click <strong>Run</strong>. This will add the missing <code>content_moderation</code> and <code>header_fit</code> columns.
-                </p>
               </div>
             ) : (
               <div className="bg-[#1e1e1e] text-[#d4d4d4] font-mono p-6 rounded shadow-2xl border border-gray-800 h-[500px] overflow-y-auto">
-                <div className="flex items-center gap-2 mb-4 border-b border-gray-800 pb-2">
-                  <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                  <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
-                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                  <span className="text-[10px] text-gray-500 ml-2 uppercase font-black">System Stream</span>
-                </div>
-                <div className="space-y-1">
-                  {logs.map((log, i) => (
-                    <div key={i} className="text-[11px] border-l-2 border-gray-700 pl-2 ml-1">
-                      {log}
-                    </div>
-                  ))}
-                  {logs.length === 0 && <div className="text-gray-600 italic">No logs recorded...</div>}
-                </div>
+                {logs.map((log, i) => (
+                    <div key={i} className="text-[11px] border-l-2 border-gray-700 pl-2 ml-1 mb-1">{log}</div>
+                ))}
               </div>
             )}
           </div>

@@ -4,6 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { supabase } from '../services/supabase';
 import { trackEvent } from '../services/analytics';
+import { sanitizeHtml, stripAllHtml, isValidEmail, LIMITS } from '../services/security';
 
 const SinglePost: React.FC = () => {
   const { slug } = useParams();
@@ -53,21 +54,40 @@ const SinglePost: React.FC = () => {
 
   const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // 1. Basic Field Check
     if (!commentName || !commentText || !commentEmail) return;
+
+    // 2. Security: Email Validation
+    if (!isValidEmail(commentEmail)) {
+      alert("Please provide a valid email address.");
+      return;
+    }
+
+    // 3. Security: Length Constraints
+    if (commentText.length > LIMITS.COMMENT_CONTENT) {
+      alert(`Comment is too long (max ${LIMITS.COMMENT_CONTENT} chars).`);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
+      // 4. Security: Sanitize all user-provided strings
+      const safeAuthorName = stripAllHtml(commentName).substring(0, LIMITS.DISPLAY_NAME);
+      const safeCommentContent = sanitizeHtml(commentText);
+
       const { error } = await supabase.from('comments').insert({
         post_id: post.id,
-        user_id: currentUser?.id || null, // Track ownership
-        author_name: commentName,
+        user_id: currentUser?.id || null, 
+        author_name: safeAuthorName,
         author_email: commentEmail,
-        content: commentText
+        content: safeCommentContent
       });
       if (error) throw error;
       setCommentText('');
       fetchPostAndComments();
     } catch (err: any) {
-      alert("Comment Error: " + err.message);
+      alert("Submission Blocked: " + err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -104,7 +124,7 @@ const SinglePost: React.FC = () => {
                     <span className="text-xs font-black uppercase tracking-tight text-gray-900">{c.author_name}</span>
                     <span className="text-[10px] text-gray-400 uppercase">{new Date(c.created_at).toLocaleDateString()}</span>
                   </div>
-                  <div className="text-sm text-gray-700 font-serif bg-white p-4 border border-gray-100 shadow-sm rounded-sm">{c.content}</div>
+                  <div className="text-sm text-gray-700 font-serif bg-white p-4 border border-gray-100 shadow-sm rounded-sm" dangerouslySetInnerHTML={{ __html: c.content }} />
                 </div>
               </div>
             ))}
@@ -117,8 +137,8 @@ const SinglePost: React.FC = () => {
               <input type="email" placeholder="Email *" required className="w-full border border-gray-300 p-3 text-sm focus:border-[#72aee6] outline-none bg-white text-gray-900" value={commentEmail} onChange={e => setCommentEmail(e.target.value)} />
             </div>
             <textarea placeholder="Comment *" required className="w-full border border-gray-300 p-4 mb-4 text-sm h-40 focus:border-[#72aee6] outline-none bg-white text-gray-900 font-serif" value={commentText} onChange={e => setCommentText(e.target.value)} />
-            <button type="submit" disabled={isSubmitting} className="bg-[#1d2327] text-white px-8 py-3 font-black uppercase text-[10px] tracking-widest rounded-sm hover:bg-black disabled:opacity-50">
-              {isSubmitting ? 'Posting...' : 'Post Comment'}
+            <button type="submit" disabled={isSubmitting} className="bg-[#1d2327] text-white px-8 py-3 font-black uppercase text-[10px] tracking-widest rounded-sm hover:bg-black disabled:opacity-50 transition-all active:scale-95 shadow-lg">
+              {isSubmitting ? 'Securing...' : 'Post Comment'}
             </button>
           </form>
         </section>

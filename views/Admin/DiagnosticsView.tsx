@@ -61,7 +61,19 @@ CREATE TABLE IF NOT EXISTS public.contacts (
 );
 ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users;
 
--- 4. PROFILE TRIGGER
+-- 4. AI JOURNALISTS TABLE
+CREATE TABLE IF NOT EXISTS public.journalists (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  niche TEXT,
+  category TEXT,
+  schedule TEXT,
+  status TEXT DEFAULT 'active',
+  last_run TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. PROFILE TRIGGER
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
@@ -82,16 +94,19 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- 5. RESET RLS & PERMISSIONS
+-- 6. RESET RLS & PERMISSIONS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.journalists ENABLE ROW LEVEL SECURITY;
 
--- 6. GLOBAL POLICIES (Simplifed for this session)
+-- 7. GLOBAL POLICIES
 DROP POLICY IF EXISTS "Public Select" ON public.comments;
 CREATE POLICY "Public Select" ON public.comments FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Owner Insert" ON public.comments;
 CREATE POLICY "Owner Insert" ON public.comments FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Admin Manage Journalists" ON public.journalists;
+CREATE POLICY "Admin Manage Journalists" ON public.journalists FOR ALL USING (true);
 
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;`;
@@ -103,7 +118,7 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;`;
   const scanTableIntegrity = async () => {
     setIsScanning(true);
     addLog("Scanning database schema and permissions...");
-    const coreTables = ['categories', 'posts', 'profiles', 'rss_feeds', 'site_settings', 'comments', 'contacts'];
+    const coreTables = ['categories', 'posts', 'profiles', 'rss_feeds', 'site_settings', 'comments', 'contacts', 'journalists'];
     const healthResults: TableHealth[] = [];
 
     for (const table of coreTables) {

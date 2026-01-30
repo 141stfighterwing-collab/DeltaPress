@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
 import AdminSidebar from '../../components/AdminSidebar';
 
@@ -26,6 +26,7 @@ const GenericListView: React.FC<Props> = ({ title, table, filterType }) => {
 
   const isCommentsTable = table === 'comments';
   const isContactsTable = table === 'contacts';
+  const isPagesView = table === 'posts' && filterType === 'page';
 
   const fetchItems = async () => {
     setLoading(true);
@@ -72,6 +73,12 @@ const GenericListView: React.FC<Props> = ({ title, table, filterType }) => {
   }, [table, filterType]);
 
   const handleEdit = (item: any) => {
+    // For posts/pages, we use the dedicated editor
+    if (table === 'posts') {
+      navigate(`/admin/edit-post/${item.id}`);
+      return;
+    }
+
     // Only owners or staff (Admins/Editors) can edit
     const isOwner = item.user_id === user?.id;
     const isStaff = ['admin', 'editor'].includes(role);
@@ -127,6 +134,8 @@ const GenericListView: React.FC<Props> = ({ title, table, filterType }) => {
     }
   };
 
+  const canCreate = ['admin', 'editor'].includes(role);
+
   return (
     <div className="flex min-h-screen bg-[#f1f1f1]">
       <AdminSidebar onLogout={() => supabase.auth.signOut().then(() => navigate('/login'))} />
@@ -138,6 +147,15 @@ const GenericListView: React.FC<Props> = ({ title, table, filterType }) => {
               {['admin', 'editor'].includes(role) ? 'Global Management View' : 'Personal Records View'}
             </p>
           </div>
+          
+          {isPagesView && canCreate && (
+            <Link 
+              to="/admin/new-post?type=page" 
+              className="bg-[#0073aa] text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest shadow-md hover:bg-[#005a87] transition-all active:scale-95"
+            >
+              Add New Page
+            </Link>
+          )}
         </header>
         
         <div className="bg-white border border-gray-200 rounded shadow-sm overflow-hidden">
@@ -146,7 +164,15 @@ const GenericListView: React.FC<Props> = ({ title, table, filterType }) => {
           ) : items.length === 0 ? (
             <div className="p-20 text-center">
               <div className="text-4xl mb-4 grayscale opacity-20">📭</div>
-              <p className="text-gray-400 font-serif italic text-sm">No {title.toLowerCase()} found in your account.</p>
+              <p className="text-gray-400 font-serif italic text-sm mb-6">No {title.toLowerCase()} found in your account.</p>
+              {isPagesView && canCreate && (
+                <Link 
+                  to="/admin/new-post?type=page" 
+                  className="inline-block text-[10px] font-black uppercase text-blue-600 border border-blue-100 px-4 py-2 rounded hover:bg-blue-50 transition-colors"
+                >
+                  Create your first page
+                </Link>
+              )}
             </div>
           ) : (
             <table className="w-full text-left">

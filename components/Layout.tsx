@@ -11,6 +11,7 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [navPages, setNavPages] = useState<{title: string, slug: string}[]>([]);
   const [settings, setSettings] = useState({
     title: 'Twenty Ten',
     slogan: 'Just another WordPress theme',
@@ -37,6 +38,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           header_fit: siteSettings.header_fit || 'cover'
         });
       }
+
+      // Fetch dynamic pages for navbar
+      const { data: pages } = await supabase
+        .from('posts')
+        .select('title, slug')
+        .eq('type', 'page')
+        .eq('status', 'publish')
+        .order('created_at', { ascending: true });
+      
+      if (pages) setNavPages(pages);
     };
     fetchData();
   }, [location.pathname]);
@@ -68,6 +79,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="flex flex-wrap">
             <Link to="/" className={getNavClass('/')}>Home</Link>
             <Link to="/news" className={getNavClass('/news')}>News</Link>
+            
+            {/* Dynamic Pages */}
+            {navPages.map((page, idx) => (
+              <Link 
+                key={idx} 
+                to={`/post/${page.slug}`} 
+                className={getNavClass(`/post/${page.slug}`)}
+              >
+                {page.title}
+              </Link>
+            ))}
+
             {isAdmin && (
               <Link to="/admin" className="px-6 py-4 inline-block text-[13px] font-black uppercase tracking-widest text-yellow-500 hover:bg-[#333]">
                 Admin

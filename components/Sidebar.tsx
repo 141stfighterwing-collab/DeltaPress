@@ -35,6 +35,7 @@ const Sidebar: React.FC = () => {
           .from('posts')
           .select('id, title, slug')
           .eq('status', 'publish')
+          .eq('type', 'post')
           .order('created_at', { ascending: false })
           .limit(5);
 
@@ -48,7 +49,8 @@ const Sidebar: React.FC = () => {
           const { data: postsWithCats } = await supabase
             .from('posts')
             .select('category_id')
-            .eq('status', 'publish');
+            .eq('status', 'publish')
+            .eq('type', 'post');
 
           setCategories(catData.map(cat => ({
             id: cat.id,

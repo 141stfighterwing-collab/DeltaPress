@@ -12,11 +12,12 @@ const BlogHome: React.FC = () => {
   useEffect(() => {
     const fetchPosts = async () => {
       try {
-        // Simplified query to ensure NO content is filtered out except for status
+        // Filter by type 'post' to separate blog entries from static pages
         const { data, error } = await supabase
           .from('posts')
           .select('*')
           .eq('status', 'publish')
+          .eq('type', 'post')
           .order('created_at', { ascending: false });
 
         if (error) throw error;

@@ -53,16 +53,22 @@ const JournalistsView: React.FC = () => {
 
   const fetchBots = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('journalists').select('*');
-    if (!error && data && data.length > 0) {
-      setBots(data);
-    } else {
-      setBots([
-        { id: '1', name: 'TechCruncher-AI', niche: 'Silicon Valley Startups', category: 'Technology', schedule: '12h', status: 'active', last_run: '2023-10-27T10:00:00Z' },
-        { id: '2', name: 'Health-Bot', niche: 'Nutrition & Biohacking', category: 'Health', schedule: '24h', status: 'active', last_run: null }
-      ]);
+    try {
+      const { data, error } = await supabase.from('journalists').select('*');
+      if (!error && data && data.length > 0) {
+        setBots(data);
+      } else {
+        // Use valid UUIDs for mock data to prevent "invalid input syntax for type uuid" error
+        setBots([
+          { id: '550e8400-e29b-41d4-a716-446655440000', name: 'TechCruncher-AI', niche: 'Silicon Valley Startups', category: 'Technology', schedule: '12h', status: 'active', last_run: '2023-10-27T10:00:00Z' },
+          { id: '6ba7b810-9dad-11d1-80b4-00c04fd430c8', name: 'Health-Bot', niche: 'Nutrition & Biohacking', category: 'Health', schedule: '24h', status: 'active', last_run: null }
+        ]);
+      }
+    } catch (err) {
+      console.error("Error fetching bots:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleOpenModal = (bot: Bot | null = null) => {
@@ -95,20 +101,21 @@ const JournalistsView: React.FC = () => {
 
     try {
       if (editingBot) {
+        // Update existing record
         const { error } = await supabase.from('journalists').update(payload).eq('id', editingBot.id);
-        if (error && error.code !== '42P01') throw error;
+        if (error) throw error;
         setBots(prev => prev.map(b => b.id === editingBot.id ? { ...b, ...payload } : b));
         alert(`${payload.name} configuration updated.`);
       } else {
-        const newId = Math.random().toString(36).substr(2, 9);
-        const { error } = await supabase.from('journalists').insert({ id: newId, ...payload });
-        if (error && error.code !== '42P01') throw error;
-        setBots(prev => [...prev, { id: newId, ...payload as any }]);
+        // Insert new record - Let the database handle UUID generation (default: gen_random_uuid())
+        const { data, error } = await supabase.from('journalists').insert([payload]).select().single();
+        if (error) throw error;
+        if (data) setBots(prev => [...prev, data]);
         alert(`New journalist ${payload.name} activated!`);
       }
       setShowConfigModal(false);
     } catch (err: any) {
-      alert("Error saving bot: " + err.message);
+      alert("Error saving bot: " + (err.message || JSON.stringify(err)));
     }
   };
 
@@ -144,7 +151,7 @@ const JournalistsView: React.FC = () => {
         status: 'publish',
         author_id: session.user.id,
         type: 'post',
-        category_id: null, // Should link to category ID if available
+        category_id: null,
         slug: title.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-') + '-' + Date.now()
       });
 

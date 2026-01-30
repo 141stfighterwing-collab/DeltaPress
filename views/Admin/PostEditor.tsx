@@ -1,13 +1,15 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams, Link, useLocation } from 'react-router-dom';
 import { generateBlogPostDraft } from '../../services/gemini';
 import { supabase } from '../../services/supabase';
+import { sanitizeHtml, cleanSlug, LIMITS } from '../../services/security';
 import AdminSidebar from '../../components/AdminSidebar';
 
 const PostEditor: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const location = useLocation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   const [title, setTitle] = useState('');
@@ -61,12 +63,16 @@ const PostEditor: React.FC = () => {
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
       const allowedRoles = ['admin', 'editor'];
       if (!profile || !allowedRoles.includes(profile.role)) {
-        // Restricted Access: Reviewers and Users cannot edit.
         navigate('/admin');
         return;
       }
 
       await fetchCategories();
+
+      const params = new URLSearchParams(location.search);
+      if (params.get('type') === 'page') {
+        setContentType('page');
+      }
 
       if (id) {
         const { data: post, error } = await supabase.from('posts').select('*').eq('id', id).single();
@@ -82,7 +88,7 @@ const PostEditor: React.FC = () => {
       setLoading(false);
     };
     checkRoleAndFetch();
-  }, [id, navigate]);
+  }, [id, navigate, location.search]);
 
   const insertFormatting = (before: string, after: string = '') => {
     const el = textareaRef.current;
@@ -108,7 +114,6 @@ const PostEditor: React.FC = () => {
     if (!showMediaModal || !showMediaModal.url) { setShowMediaModal(null); return; }
     let { type, url } = showMediaModal;
 
-    // Dropbox Link Fix: Convert preview link to direct stream link
     if (url.includes('dropbox.com')) {
       url = url.replace(/dl=0$/, 'raw=1').replace(/dl=1$/, 'raw=1');
       if (!url.includes('raw=1')) {
@@ -117,7 +122,6 @@ const PostEditor: React.FC = () => {
     }
 
     if (type === 'audio') {
-      // Check for common embed platforms vs direct files
       if (!url.includes('raw=1') && !url.match(/\.(mp3|wav|ogg|m4a|m4b)/i) && (url.includes('soundcloud.com') || url.includes('spotify.com') || url.includes('notebooklm.google.com'))) {
         insertFormatting(`<iframe src="${url}" width="100%" height="166" scrolling="no" frameborder="no"></iframe>\n\n`);
       } else {
@@ -137,19 +141,34 @@ const PostEditor: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!title || !content) { alert("Title and content are required."); return; }
+    // 1. Basic Field Presence
+    if (!title.trim() || !content.trim()) { 
+      alert("Title and content are required."); 
+      return; 
+    }
+
+    // 2. Length Validation
+    if (title.length > LIMITS.POST_TITLE) {
+      alert(`Title is too long (max ${LIMITS.POST_TITLE} chars).`);
+      return;
+    }
+
     setIsSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session.");
 
+      // 3. Security: Sanitize Content before DB Save
+      const safeContent = sanitizeHtml(content);
+      
+      // 4. Security: Clean Slug generation
       const timestamp = Date.now().toString().slice(-6);
-      const baseSlug = title.toLowerCase().trim().replace(/[^\w ]+/g, '').replace(/ +/g, '-');
+      const baseSlug = cleanSlug(title);
       const slug = id ? baseSlug : `${baseSlug}-${timestamp}`;
 
       const postData: any = {
         title: title.trim(),
-        content,
+        content: safeContent,
         slug,
         status,
         author_id: session.user.id,
@@ -168,7 +187,7 @@ const PostEditor: React.FC = () => {
       if (res.error) throw res.error;
       navigate(contentType === 'page' ? '/admin/pages' : '/admin/posts');
     } catch (err: any) {
-      alert(`Save Error: ${err.message}\n\nHint: Check Diagnostics to repair Database Policies.`);
+      alert(`Security Check Failed or Save Error: ${err.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -195,22 +214,15 @@ const PostEditor: React.FC = () => {
                 type="button" onClick={handleSave} disabled={isSaving} 
                 className="bg-[#0073aa] text-white px-6 py-2 rounded text-xs font-black uppercase hover:bg-[#005a87] disabled:opacity-50 shadow-sm transition-all active:scale-95"
               >
-                {isSaving ? 'Saving...' : 'Publish Content'}
+                {isSaving ? 'Verifying & Saving...' : 'Publish Content'}
               </button>
             </div>
           </header>
 
-          {/* DOCUMENT SETTINGS PANEL */}
           <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
             <div className="flex items-center justify-between mb-6 border-b border-gray-100 pb-2">
                 <div className="flex items-center gap-3">
                     <h3 className="text-xs font-black uppercase tracking-widest text-blue-600">⚙️ Editor Config</h3>
-                </div>
-                <div className="flex gap-4">
-                    <button type="button" onClick={fetchCategories} className="text-[10px] font-bold text-blue-400 hover:text-blue-600 uppercase tracking-tighter transition-colors">Emergency Re-Sync 🔄</button>
-                    <Link to="/admin/diagnostics" className="text-[10px] font-bold text-red-500 hover:text-red-700 uppercase tracking-tighter bg-red-50 px-2 py-1 rounded">
-                        Repair Database Errors 🩺
-                    </Link>
                 </div>
             </div>
             
@@ -226,7 +238,6 @@ const PostEditor: React.FC = () => {
                   {categories.map(cat => (
                     <option key={cat.id} value={cat.id}>{cat.name}</option>
                   ))}
-                  {catStatus === 'error' && <option disabled>⚠️ Database Permission Error</option>}
                 </select>
               </div>
 
@@ -277,7 +288,6 @@ const PostEditor: React.FC = () => {
               <button type="button" onClick={() => setShowMediaModal({ type: 'video', url: '' })} className="px-4 h-9 flex items-center justify-center hover:bg-red-600 hover:text-white rounded text-[10px] font-black uppercase tracking-widest text-red-600 border border-red-100 transition-all">🎬 Video File</button>
             </div>
 
-            {/* HIGH CONTRAST EDITOR AREA */}
             <div className="p-10 bg-white min-h-[800px]">
               <input 
                 type="text" placeholder="Enter title here" 
@@ -316,12 +326,6 @@ const PostEditor: React.FC = () => {
                     />
                 </div>
                 
-                {showMediaModal.url.includes('dropbox.com') && (
-                  <div className="p-3 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase rounded border border-blue-100">
-                    ✨ Dropbox link detected! Converting for direct streaming.
-                  </div>
-                )}
-
                 <div className="flex justify-end gap-3 pt-6 border-t">
                     <button type="button" onClick={() => setShowMediaModal(null)} className="text-gray-400 font-bold px-4 uppercase text-[10px] tracking-widest">Cancel</button>
                     <button type="button" onClick={handleInsertMedia} className="bg-gray-900 text-white px-10 py-3 rounded-lg font-black uppercase text-[10px] tracking-widest hover:bg-black shadow-xl active:scale-95 transition-all">Insert into post</button>

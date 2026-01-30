@@ -1,22 +1,13 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-const getApiKey = () => {
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env.API_KEY || (process.env as any).GEMINI_KEY || (process.env as any).VITE_GEMINI_API_KEY;
-  }
-  if (typeof window !== 'undefined' && (window as any).process?.env) {
-    const env = (window as any).process.env;
-    return env.API_KEY || env.GEMINI_KEY || env.VITE_GEMINI_API_KEY;
-  }
-  return null;
-};
-
 export async function generateBlogPostDraft(topic: string) {
-  const apiKey = getApiKey();
+  // The SDK requires the key to be in process.env.API_KEY
+  // Our vite.config.js handles the injection of this value.
+  const apiKey = process.env.API_KEY;
   
   if (!apiKey) {
-    console.error("Gemini API key is missing. Ensure API_KEY or GEMINI_KEY is set in Vercel.");
+    console.error("Gemini API key is missing from process.env.API_KEY");
     return "Error: Gemini API key is not configured.";
   }
 
@@ -32,6 +23,6 @@ export async function generateBlogPostDraft(topic: string) {
     return response.text;
   } catch (error) {
     console.error("Gemini AI error:", error);
-    return "Error generating content. Please try again.";
+    return "Error generating content. Please check your API key quotas and project billing.";
   }
 }

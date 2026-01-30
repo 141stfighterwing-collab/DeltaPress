@@ -14,7 +14,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [settings, setSettings] = useState({
     title: 'Twenty Ten',
     slogan: 'Just another WordPress theme',
-    header_image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&q=80&w=940&h=200'
+    header_image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&q=80&w=940&h=200',
+    header_fit: 'cover' as 'cover' | 'contain'
   });
 
   useEffect(() => {
@@ -32,7 +33,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         setSettings({
           title: siteSettings.title || 'Twenty Ten',
           slogan: siteSettings.slogan || 'Just another WordPress theme',
-          header_image: siteSettings.header_image || 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&q=80&w=940&h=200'
+          header_image: siteSettings.header_image || 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&q=80&w=940&h=200',
+          header_fit: siteSettings.header_fit || 'cover'
         });
       }
     };
@@ -49,10 +51,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-[#e9eaee] font-sans text-gray-800">
-      {/* Centered Wrapper */}
       <div className="max-w-[940px] mx-auto bg-white shadow-xl min-h-screen border-x border-gray-200">
         
-        {/* Site Identity Header */}
         <header className="p-10 pt-16">
           <Link to="/" className="inline-block group">
             <h1 className="text-4xl font-black text-gray-900 leading-none mb-2 font-serif group-hover:text-blue-700 transition-colors">
@@ -64,7 +64,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </p>
         </header>
 
-        {/* Horizontal Navigation Menu */}
         <nav className="bg-black border-y border-gray-800">
           <div className="flex flex-wrap">
             <Link to="/" className={getNavClass('/')}>Home</Link>
@@ -77,33 +76,26 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
         </nav>
 
-        {/* Global Header Image */}
         <div className="p-6">
           <div className="aspect-[94/20] overflow-hidden bg-gray-100 rounded-sm">
             <img 
               src={settings.header_image} 
               alt="Site Header" 
-              className="w-full h-full object-cover"
+              className={`w-full h-full ${settings.header_fit === 'cover' ? 'object-cover' : 'object-contain'}`}
               onError={(e) => (e.target as HTMLImageElement).src = 'https://via.placeholder.com/940x200?text=Header+Image'}
             />
           </div>
         </div>
 
-        {/* Main Content & Sidebar Layout */}
         <div className="flex flex-col md:flex-row p-6 lg:p-10 gap-10">
-          
-          {/* Main Content Column */}
           <main className="flex-1 min-w-0">
             {children}
           </main>
-
-          {/* Widgets Sidebar Column (Twenty Ten default right alignment) */}
           <aside className="w-full md:w-[240px] shrink-0">
             <Sidebar />
           </aside>
         </div>
 
-        {/* Footer */}
         <footer className="mt-20 p-10 border-t border-gray-100 bg-gray-50/50">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">

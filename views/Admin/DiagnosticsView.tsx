@@ -25,6 +25,28 @@ const DiagnosticsView: React.FC = () => {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
   };
 
+  const probeNetwork = async () => {
+    addLog("🌐 Probing Google API endpoint connectivity...");
+    try {
+      // A simple HEAD request to see if the domain is reachable
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      await fetch('https://generativelanguage.googleapis.com/', { 
+        mode: 'no-cors',
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      addLog("✅ Network: Google API endpoint is reachable.");
+      return true;
+    } catch (e: any) {
+      addLog(`❌ NETWORK PROBE FAILED: ${e.message}`);
+      addLog("Possible causes: DNS block, ISP restriction, or internal browser firewall.");
+      return false;
+    }
+  };
+
   const scanTableIntegrity = async () => {
     setIsScanning(true);
     addLog("Scanning database schema and permissions...");
@@ -53,8 +75,10 @@ const DiagnosticsView: React.FC = () => {
     setGeminiStatus('pending');
     setDbStatus('pending');
     setRssStatus('pending');
-    addLog("🚀 INITIALIZING SUPREME DIAGNOSTICS...");
+    addLog("🚀 INITIALIZING SUPREME DIAGNOSTICS V1.2...");
     
+    addLog(`Browser Status: ${navigator.onLine ? 'ONLINE' : 'OFFLINE'}`);
+
     // 1. Supabase Check
     try {
       const { data, error } = await supabase.from('site_settings').select('id').limit(1);
@@ -66,50 +90,55 @@ const DiagnosticsView: React.FC = () => {
       addLog(`❌ Supabase Error: ${err.message}`);
     }
 
-    // 2. Gemini Key Injection Check
+    // 2. Network Probe
+    await probeNetwork();
+
+    // 3. Gemini Key Injection Check
     const key = process.env.API_KEY;
-    addLog(`🔍 Key Inspection: Found variable 'process.env.API_KEY'`);
+    addLog(`🔍 Key Injection Check: searching for 'process.env.API_KEY'`);
     
-    if (!key) {
-      addLog("❌ CRITICAL: API_KEY is undefined. Injection failed.");
+    if (!key || key === '') {
+      addLog("❌ CRITICAL: API_KEY is empty or undefined. Build-time injection failed.");
       setGeminiStatus('error');
     } else if (key.length < 10) {
-      addLog(`❌ WARNING: API_KEY looks too short (Length: ${key.length}). Possible truncation.`);
+      addLog(`❌ WARNING: API_KEY is too short (${key.length} chars). Check if the secret was truncated.`);
       setGeminiStatus('error');
     } else {
-      const obscured = `${key.substring(0, 4)}...${key.substring(key.length - 4)}`;
-      addLog(`📡 Key Detected: ${obscured} (Total Length: ${key.length})`);
+      const maskedKey = `${key.substring(0, 6)}...${key.substring(key.length - 4)}`;
+      addLog(`📡 Key Detected: ${maskedKey} (Length: ${key.length})`);
       
-      // 3. Network / Handshake Check
+      // 4. Handshake Check
       try {
-        addLog("🛰️ Attempting Gemini handshake...");
-        // Always initialize GoogleGenAI within the calling context to ensure API_KEY is current
+        addLog("🛰️ Attempting SDK Handshake...");
         const ai = new GoogleGenAI({ apiKey: key });
         const response = await ai.models.generateContent({ 
           model: 'gemini-3-flash-preview', 
-          contents: "Is the connection alive? Respond with 'YES'." 
+          contents: "Hello. Response with exactly 'READY'." 
         });
         
         if (response.text) {
           setGeminiStatus('ok');
-          addLog("✅ Gemini AI Agent: Handshake Successful.");
+          addLog(`✅ Gemini AI Agent: Handshake Successful. Response: ${response.text.trim()}`);
         } else {
-          throw new Error("Handshake succeeded but response body was empty.");
+          throw new Error("SDK connected but returned an empty response body.");
         }
       } catch (err: any) {
         setGeminiStatus('error');
-        console.error("Gemini Handshake Failure:", err);
+        console.error("Gemini Detailed Error:", err);
         
-        if (err.message?.includes('Failed to fetch')) {
-          addLog("❌ NETWORK ERROR: 'Failed to fetch'. This usually means an AdBlocker or Privacy extension is blocking Google API.");
-          addLog("👉 TIP: Disable extensions like AdBlock, uBlock, or Brave Shields and try again.");
-        } else {
-          addLog(`❌ Gemini API Error: ${err.message}`);
+        const errorMsg = err.message || "Unknown error";
+        addLog(`❌ HANDSHAKE FAILED: ${errorMsg}`);
+        
+        if (errorMsg.includes('Failed to fetch')) {
+          addLog("💡 HINT: 'Failed to fetch' usually indicates a network-level interceptor.");
+          addLog("Try: 1. Incognito mode. 2. Different Browser. 3. Mobile Hotspot (bypass local DNS/Firewall).");
         }
+        
+        if (err.status) addLog(`HTTP Status: ${err.status}`);
       }
     }
 
-    // 4. RSS Pipeline Check
+    // 5. RSS Pipeline Check
     try {
       setRssStatus('ok');
       addLog("✅ RSS Pipeline: Signal stable.");
@@ -124,7 +153,6 @@ const DiagnosticsView: React.FC = () => {
     runDiagnostics();
   }, []);
 
-  // Status indicator sub-component for layout
   const StatusCard = ({ title, status, icon }: { title: string, status: 'pending' | 'ok' | 'error', icon: string }) => (
     <div className="bg-white p-6 rounded shadow-sm border border-gray-200 flex flex-col items-center justify-center text-center transition-all hover:shadow-md">
       <div className={`text-4xl mb-2 ${status === 'pending' ? 'animate-pulse' : ''}`}>{icon}</div>
@@ -145,7 +173,7 @@ const DiagnosticsView: React.FC = () => {
       <main className="flex-1 p-6 lg:p-10 max-w-5xl mx-auto">
         <header className="mb-10">
           <h1 className="text-3xl font-bold text-gray-900 font-serif">Diagnostics Hub</h1>
-          <p className="text-gray-500 text-sm italic">Core system health and AI integration status.</p>
+          <p className="text-gray-500 text-sm italic">Deep audit of system nodes, network paths, and AI integration.</p>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
@@ -155,7 +183,7 @@ const DiagnosticsView: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden h-fit">
             <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
               <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">Schema Integrity</h3>
               <button 
@@ -182,16 +210,19 @@ const DiagnosticsView: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-gray-900 rounded-lg shadow-2xl flex flex-col h-[500px]">
+          <div className="bg-gray-900 rounded-lg shadow-2xl flex flex-col h-[550px] border border-gray-700">
             <div className="px-6 py-4 border-b border-gray-800 flex justify-between items-center">
-              <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500">System Log</h3>
-              <button onClick={() => setLogs([])} className="text-[10px] text-gray-600 hover:text-white uppercase font-bold">Clear</button>
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">System Log Terminal</h3>
+              <div className="flex gap-4">
+                <button onClick={runDiagnostics} className="text-[10px] text-blue-400 hover:text-white uppercase font-bold">Restart Audit</button>
+                <button onClick={() => setLogs([])} className="text-[10px] text-gray-600 hover:text-white uppercase font-bold">Clear</button>
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-6 space-y-2 font-mono text-[11px] text-blue-400/80">
+            <div className="flex-1 overflow-y-auto p-6 space-y-2 font-mono text-[11px] text-blue-300/90 leading-relaxed">
               {logs.map((log, i) => (
-                <div key={i} className="leading-relaxed whitespace-pre-wrap">{log}</div>
+                <div key={i} className="whitespace-pre-wrap border-l-2 border-blue-900/50 pl-3">{log}</div>
               ))}
-              {logs.length === 0 && <div className="text-gray-600 italic">No events recorded.</div>}
+              {logs.length === 0 && <div className="text-gray-600 italic">No events recorded. Waiting for audit command.</div>}
             </div>
           </div>
         </div>

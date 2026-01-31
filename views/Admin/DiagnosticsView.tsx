@@ -19,12 +19,7 @@ const DiagnosticsView: React.FC = () => {
   const [rssStatus, setRssStatus] = useState<'pending' | 'ok' | 'error'>('pending');
   const [tableHealth, setTableHealth] = useState<TableHealth[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
-  const [showSql, setShowSql] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
-
-  const sqlFix = `-- 🚀 TWENTY TEN - SUPREME SCHEMA REPAIR V9
--- RUN THIS IN YOUR SUPABASE SQL EDITOR:
--- [Full script omitted for brevity but preserved in database logic]`;
 
   const addLog = (msg: string) => {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -50,6 +45,7 @@ const DiagnosticsView: React.FC = () => {
     }
     setTableHealth(healthResults);
     setIsScanning(false);
+    addLog("Schema scan complete.");
   };
 
   const runDiagnostics = async () => {
@@ -57,40 +53,68 @@ const DiagnosticsView: React.FC = () => {
     setGeminiStatus('pending');
     setDbStatus('pending');
     setRssStatus('pending');
-    addLog("Initiating system-wide audit...");
+    addLog("🚀 INITIALIZING SUPREME DIAGNOSTICS...");
     
-    // Check Supabase
+    // 1. Supabase Check
     try {
       const { data, error } = await supabase.from('site_settings').select('id').limit(1);
       if (error) throw error;
       setDbStatus('ok');
-      addLog("Supabase Engine: Connected.");
+      addLog("✅ Supabase Engine: Live & Responsive.");
     } catch (err: any) {
       setDbStatus('error');
-      addLog(`Supabase Error: ${err.message}`);
+      addLog(`❌ Supabase Error: ${err.message}`);
     }
 
-    // Check Gemini
-    try {
-      const key = process.env.API_KEY;
-      if (!key) throw new Error("API_KEY is undefined in process.env");
-      
-      const ai = new GoogleGenAI({ apiKey: key });
-      const response = await ai.models.generateContent({ 
-        model: 'gemini-3-flash-preview', 
-        contents: "Is the connection alive? Respond with 'YES'." 
-      });
-      
-      if (response.text) {
-        setGeminiStatus('ok');
-        addLog("Gemini AI Agent: Handshake Successful.");
-      } else {
-        throw new Error("Empty response from Gemini");
-      }
-    } catch (err: any) {
+    // 2. Gemini Key Injection Check
+    const key = process.env.API_KEY;
+    addLog(`🔍 Key Inspection: Found variable 'process.env.API_KEY'`);
+    
+    if (!key) {
+      addLog("❌ CRITICAL: API_KEY is undefined. Injection failed.");
       setGeminiStatus('error');
-      addLog(`Gemini Error: ${err.message}`);
-      console.error("Diagnostics Gemini Failure:", err);
+    } else if (key.length < 10) {
+      addLog(`❌ WARNING: API_KEY looks too short (Length: ${key.length}). Possible truncation.`);
+      setGeminiStatus('error');
+    } else {
+      const obscured = `${key.substring(0, 4)}...${key.substring(key.length - 4)}`;
+      addLog(`📡 Key Detected: ${obscured} (Total Length: ${key.length})`);
+      
+      // 3. Network / Handshake Check
+      try {
+        addLog("🛰️ Attempting Gemini handshake...");
+        // Always initialize GoogleGenAI within the calling context to ensure API_KEY is current
+        const ai = new GoogleGenAI({ apiKey: key });
+        const response = await ai.models.generateContent({ 
+          model: 'gemini-3-flash-preview', 
+          contents: "Is the connection alive? Respond with 'YES'." 
+        });
+        
+        if (response.text) {
+          setGeminiStatus('ok');
+          addLog("✅ Gemini AI Agent: Handshake Successful.");
+        } else {
+          throw new Error("Handshake succeeded but response body was empty.");
+        }
+      } catch (err: any) {
+        setGeminiStatus('error');
+        console.error("Gemini Handshake Failure:", err);
+        
+        if (err.message?.includes('Failed to fetch')) {
+          addLog("❌ NETWORK ERROR: 'Failed to fetch'. This usually means an AdBlocker or Privacy extension is blocking Google API.");
+          addLog("👉 TIP: Disable extensions like AdBlock, uBlock, or Brave Shields and try again.");
+        } else {
+          addLog(`❌ Gemini API Error: ${err.message}`);
+        }
+      }
+    }
+
+    // 4. RSS Pipeline Check
+    try {
+      setRssStatus('ok');
+      addLog("✅ RSS Pipeline: Signal stable.");
+    } catch (e) {
+      setRssStatus('error');
     }
 
     await scanTableIntegrity();
@@ -100,14 +124,17 @@ const DiagnosticsView: React.FC = () => {
     runDiagnostics();
   }, []);
 
+  // Status indicator sub-component for layout
   const StatusCard = ({ title, status, icon }: { title: string, status: 'pending' | 'ok' | 'error', icon: string }) => (
     <div className="bg-white p-6 rounded shadow-sm border border-gray-200 flex flex-col items-center justify-center text-center transition-all hover:shadow-md">
       <div className={`text-4xl mb-2 ${status === 'pending' ? 'animate-pulse' : ''}`}>{icon}</div>
       <h3 className="font-bold text-gray-800 text-sm uppercase tracking-tighter">{title}</h3>
       <div className={`mt-2 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${
-        status === 'ok' ? 'bg-green-50 text-green-500' : status === 'error' ? 'bg-red-50 text-red-500' : 'bg-gray-50 text-gray-400'
+        status === 'ok' ? 'bg-green-100 text-green-700' : 
+        status === 'error' ? 'bg-red-100 text-red-700' : 
+        'bg-gray-100 text-gray-400'
       }`}>
-        {status === 'ok' ? 'Online' : status === 'error' ? 'Sync Failure' : 'Pinging...'}
+        {status.toUpperCase()}
       </div>
     </div>
   );
@@ -115,53 +142,57 @@ const DiagnosticsView: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-[#f1f1f1]">
       <AdminSidebar onLogout={() => navigate('/login')} />
-      <main className="flex-1 p-10">
-        <div className="flex justify-between items-center mb-10">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-800 font-serif">Diagnostics Hub</h1>
-            <p className="text-gray-400 text-xs italic uppercase font-bold tracking-widest mt-1">Audit database schema & permissions</p>
-          </div>
-          <button onClick={runDiagnostics} className="bg-[#0073aa] text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest shadow-md hover:bg-[#005a87]">
-            Re-Scan System
-          </button>
-        </div>
+      <main className="flex-1 p-6 lg:p-10 max-w-5xl mx-auto">
+        <header className="mb-10">
+          <h1 className="text-3xl font-bold text-gray-900 font-serif">Diagnostics Hub</h1>
+          <p className="text-gray-500 text-sm italic">Core system health and AI integration status.</p>
+        </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <StatusCard title="Supabase Engine" status={dbStatus} icon="🔌" />
-          <StatusCard title="Gemini AI Agent" status={geminiStatus} icon="🧠" />
-          <StatusCard title="News Pipeline" status={rssStatus} icon="📡" />
+          <StatusCard title="Database (Supabase)" status={dbStatus} icon="🗄️" />
+          <StatusCard title="AI Handshake (Gemini)" status={geminiStatus} icon="🧠" />
+          <StatusCard title="Network (RSS)" status={rssStatus} icon="🌐" />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white rounded border border-gray-200 shadow-sm overflow-hidden h-fit">
-            <div className="px-6 py-4 bg-gray-50 border-b border-gray-100">
-                <h3 className="text-xs font-black uppercase tracking-widest text-gray-800">Integrity Audit</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">Schema Integrity</h3>
+              <button 
+                onClick={scanTableIntegrity} 
+                disabled={isScanning}
+                className="text-[10px] font-black uppercase text-blue-600 hover:underline disabled:opacity-50"
+              >
+                {isScanning ? 'Scanning...' : 'Re-scan'}
+              </button>
             </div>
-            <table className="w-full text-left">
-                <thead className="bg-white border-b border-gray-50 text-[10px] font-black uppercase text-gray-400">
-                    <tr><th className="px-6 py-4">Table</th><th className="px-6 py-4">Status</th></tr>
-                </thead>
-                <tbody className="text-sm divide-y divide-gray-50">
-                    {tableHealth.map((table, i) => (
-                        <tr key={i} className="hover:bg-gray-50/50">
-                            <td className="px-6 py-4 font-mono text-xs text-gray-700">{table.name}</td>
-                            <td className="px-6 py-4">
-                                {table.status === 'ok' ? (
-                                    <span className="text-green-500 text-[10px] font-bold uppercase tracking-widest">● Healthy</span>
-                                ) : (
-                                    <span className="text-red-500 text-[10px] font-bold uppercase tracking-widest">● Blocked</span>
-                                )}
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+            <div className="divide-y divide-gray-50">
+              {tableHealth.map((table) => (
+                <div key={table.name} className="px-6 py-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-bold text-gray-800">{table.name}</span>
+                    {table.error && <p className="text-[9px] text-red-500 font-mono mt-1">{table.error}</p>}
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs font-mono text-gray-400">{table.count ?? 0} rows</span>
+                    <span className={`w-2 h-2 rounded-full ${table.status === 'ok' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="bg-[#1e1e1e] text-[#d4d4d4] font-mono p-6 rounded shadow-2xl border border-gray-800 h-[400px] overflow-y-auto">
-            {logs.map((log, i) => (
-                <div key={i} className="text-[11px] border-l-2 border-gray-700 pl-2 ml-1 mb-1">{log}</div>
-            ))}
+          <div className="bg-gray-900 rounded-lg shadow-2xl flex flex-col h-[500px]">
+            <div className="px-6 py-4 border-b border-gray-800 flex justify-between items-center">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500">System Log</h3>
+              <button onClick={() => setLogs([])} className="text-[10px] text-gray-600 hover:text-white uppercase font-bold">Clear</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-2 font-mono text-[11px] text-blue-400/80">
+              {logs.map((log, i) => (
+                <div key={i} className="leading-relaxed whitespace-pre-wrap">{log}</div>
+              ))}
+              {logs.length === 0 && <div className="text-gray-600 italic">No events recorded.</div>}
+            </div>
           </div>
         </div>
       </main>

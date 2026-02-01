@@ -42,7 +42,7 @@ const AdminSidebar: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     { label: 'RSS Feeds', path: '/admin/rss', icon: '📡', roles: ['admin'] },
     { label: 'Journalists', path: '/admin/journalists', icon: '🤖', roles: ['admin'] },
     { label: 'Services', path: '/admin/services', icon: '🛠️', roles: ['admin'] },
-    { label: 'Members', path: '/admin/members', icon: '👤', roles: ['admin'] },
+    { label: 'Members', path: '/admin/users', icon: '👤', roles: ['admin'] }, // Changed from /members to /users
     { label: 'Messages', path: '/admin/messages', icon: '📬', roles: ['admin'] },
     { label: 'Media', path: '/admin/media', icon: '📷', roles: ['admin', 'editor'] },
     { label: 'Pages', path: '/admin/pages', icon: '📄', roles: ['admin', 'editor'] },
@@ -58,43 +58,37 @@ const AdminSidebar: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const filteredItems = menuItems.filter(item => {
     if (item.type === 'separator') return true;
     return (item as any).roles.includes(role);
-  }).filter((item, index, self) => {
-    if (item.type === 'separator' && (index === 0 || self[index-1]?.type === 'separator')) return false;
-    return true;
   });
 
   return (
-    <div className={`${collapsed ? 'w-12' : 'w-56'} bg-[#23282d] text-[#eee] flex flex-col h-screen transition-all duration-200 sticky top-0 overflow-y-auto overflow-x-hidden select-none z-50 shrink-0`}>
+    <div className={`${collapsed ? 'w-12' : 'w-64'} bg-[#23282d] text-[#eee] flex flex-col h-screen transition-all duration-200 sticky top-0 overflow-y-auto overflow-x-hidden select-none z-50 shrink-0`}>
       
-      {/* Identity Header */}
       <div className="p-4 bg-[#1d2327] flex items-center gap-3 border-b border-white/5">
         <div 
           onClick={() => navigate('/admin/appearance')}
-          className="w-8 h-8 rounded-full overflow-hidden bg-gray-700 shrink-0 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all border border-white/10"
+          className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 shrink-0 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all border border-white/10"
         >
           {userProfile?.avatar_url ? (
             <img src={userProfile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gray-600">
-              <svg viewBox="0 0 24 24" className="w-5 h-5 text-gray-400" fill="currentColor">
-                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-              </svg>
+              <span className="text-gray-400 font-bold">{userProfile?.display_name?.[0] || 'U'}</span>
             </div>
           )}
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <span className="block text-[11px] font-black text-white uppercase tracking-tighter truncate leading-none mb-1">
+            <span className="block text-[12px] font-black text-white uppercase tracking-tighter truncate leading-none mb-1">
               {userProfile?.display_name || 'Staff Member'}
             </span>
-            <span className="block text-[8px] font-bold text-blue-400 uppercase tracking-widest leading-none">
+            <span className="block text-[9px] font-bold text-blue-400 uppercase tracking-widest leading-none">
               {role}
             </span>
           </div>
         )}
       </div>
 
-      <nav className="flex-1 py-1">
+      <nav className="flex-1 py-2">
         {loading ? (
           <div className="px-4 py-10 opacity-20 animate-pulse space-y-4">
             <div className="h-4 bg-gray-500 rounded w-full"></div>
@@ -106,7 +100,7 @@ const AdminSidebar: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               return <div key={idx} className="h-4 border-b border-[#3c434a] my-2 mx-4 opacity-10" />;
             }
 
-            const className = `flex items-center gap-3 px-3 py-2 hover:bg-[#191e23] hover:text-[#72aee6] transition-colors text-[13px] ${isActive(item.path!) ? 'bg-[#0073aa] text-white font-bold' : 'text-[#a7aaad]'}`;
+            const className = `flex items-center gap-3 px-4 py-2.5 hover:bg-[#191e23] hover:text-[#72aee6] transition-colors text-[14px] ${isActive(item.path!) ? 'bg-[#0073aa] text-white font-bold' : 'text-[#a7aaad]'}`;
 
             return (
               <Link key={idx} to={item.path!} className={className}>
@@ -121,17 +115,17 @@ const AdminSidebar: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       <div className="mt-auto border-t border-[#3c434a] bg-[#1d2327]">
         <button
           onClick={onLogout}
-          className="w-full flex items-center gap-3 px-3 py-3 hover:bg-red-900 text-red-200 text-[11px] uppercase font-bold transition-colors"
+          className="w-full flex items-center gap-3 px-4 py-4 hover:bg-red-900 text-red-200 text-[11px] uppercase font-bold transition-colors"
         >
           <span className="text-lg w-6 flex justify-center">🚪</span>
           {!collapsed && <span className="truncate">Log out</span>}
         </button>
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="w-full flex items-center gap-3 px-3 py-3 hover:bg-[#191e23] text-[#a7aaad] text-[11px] uppercase font-bold transition-colors border-t border-[#3c434a]"
+          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#191e23] text-[#a7aaad] text-[11px] uppercase font-bold transition-colors border-t border-[#3c434a]"
         >
           <span className="text-lg w-6 flex justify-center">{collapsed ? '▶' : '◀'}</span>
-          {!collapsed && <span className="truncate">Collapse</span>}
+          {!collapsed && <span className="truncate">Collapse Sidebar</span>}
         </button>
       </div>
     </div>

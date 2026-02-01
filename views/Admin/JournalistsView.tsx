@@ -37,7 +37,6 @@ const SPECTRUM_LABELS: Record<number, string> = {
   [3]: 'Far Right'
 };
 
-// Curated professional IDs for Picsum
 const AVATAR_URLS = {
   male: 'https://picsum.photos/id/1012/150/150',
   female: 'https://picsum.photos/id/1027/150/150'
@@ -50,26 +49,20 @@ const JournalistsView: React.FC = () => {
   const [isDeploying, setIsDeploying] = useState<string | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [editingBot, setEditingBot] = useState<Bot | null>(null);
-  const [moderationEnabled, setModerationEnabled] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
     niche: '',
     category: 'Politics',
-    schedule: '6h',
+    schedule: '24h',
     perspective: 0,
     gender: 'female' as 'male' | 'female'
   });
 
   useEffect(() => {
     fetchBots();
-    fetchModerationStatus();
   }, []);
-
-  const fetchModerationStatus = async () => {
-    const { data } = await supabase.from('site_settings').select('content_moderation').eq('id', 1).maybeSingle();
-    if (data) setModerationEnabled(data.content_moderation);
-  };
 
   const fetchBots = async () => {
     setLoading(true);
@@ -78,9 +71,10 @@ const JournalistsView: React.FC = () => {
       if (!error && data && data.length > 0) {
         setBots(data);
       } else {
+        // Humanized Defaults per user request
         setBots([
-          { id: '550e8400-e29b-41d4-a716-446655440000', name: 'PolitiBot-Alpha', niche: 'Global Governance', category: 'Politics', schedule: '12h', status: 'active', last_run: '2023-10-27T10:00:00Z', perspective: 0, gender: 'female' },
-          { id: '6ba7b810-9dad-11d1-80b4-00c04fd430c8', name: 'MarketWatcher', niche: 'Macro Economics', category: 'Economics', schedule: '24h', status: 'active', last_run: null, perspective: 1, gender: 'male' }
+          { id: 'gemma-bot-uuid', name: 'Gemma', niche: 'Global Governance', category: 'Politics', schedule: '24h', status: 'active', last_run: null, perspective: 0, gender: 'female' },
+          { id: 'gary-bot-uuid', name: 'Gary', niche: 'Macro Economics', category: 'Economics', schedule: '24h', status: 'active', last_run: null, perspective: 1, gender: 'male' }
         ]);
       }
     } catch (err) {
@@ -103,80 +97,91 @@ const JournalistsView: React.FC = () => {
       });
     } else {
       setEditingBot(null);
-      setFormData({ name: '', niche: '', category: 'Politics', schedule: '6h', perspective: 0, gender: 'female' });
+      setFormData({ name: '', niche: '', category: 'Politics', schedule: '24h', perspective: 0, gender: 'female' });
     }
     setShowConfigModal(true);
   };
 
   const handleSaveBot = async () => {
-    if (!formData.name || !formData.niche) {
-      alert("Please fill in all required fields.");
+    // VALIDATION
+    if (!formData.name.trim() || formData.name.length < 2) {
+      alert("Validation Error: Please provide a valid Name for the reporter.");
+      return;
+    }
+    if (!formData.niche.trim() || formData.niche.length < 3) {
+      alert("Validation Error: Niche Focus is required to define editorial logic.");
       return;
     }
 
-    const payload = {
-      ...formData,
-      status: editingBot?.status || 'active',
-      last_run: editingBot?.last_run || null
-    };
-
+    setIsSaving(true);
     try {
-      if (editingBot) {
-        const { error } = await supabase.from('journalists').update(payload).eq('id', editingBot.id);
-        if (error) throw error;
-        setBots(prev => prev.map(b => b.id === editingBot.id ? { ...b, ...payload } : b));
+      const payload: any = {
+        name: formData.name.trim(),
+        niche: formData.niche.trim(),
+        category: formData.category,
+        schedule: formData.schedule,
+        perspective: formData.perspective,
+        gender: formData.gender,
+        status: editingBot?.status || 'active'
+      };
+
+      let result;
+      // If we are editing a MOCK bot, we must INSERT it to create a real DB entry
+      const isMockId = editingBot?.id.includes('-bot-uuid');
+
+      if (editingBot && !isMockId) {
+        result = await supabase.from('journalists').update(payload).eq('id', editingBot.id);
       } else {
-        const { data, error } = await supabase.from('journalists').insert([payload]).select().single();
-        if (error) throw error;
-        if (data) setBots(prev => [...prev, data]);
+        result = await supabase.from('journalists').insert([payload]);
       }
+
+      if (result.error) throw result.error;
+
+      await fetchBots(); // Refresh state from source of truth
       setShowConfigModal(false);
+      alert(`Logic committed: ${formData.name} is now synchronized with the newsroom.`);
     } catch (err: any) {
-      alert("Error saving bot: " + (err.message || JSON.stringify(err)));
+      console.error("Save error:", err);
+      alert("Save Failed: " + (err.message || "Ensure your database has a 'journalists' table with the correct columns."));
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleRunBot = async (bot: Bot) => {
+    if (bot.id.includes('-bot-uuid')) {
+      alert("Configuration Required: This is a demo reporter. Click 'Edit' then 'Commit Logic' to save this reporter to your database before running.");
+      return;
+    }
+
     setIsDeploying(bot.id);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const perspectiveText = SPECTRUM_LABELS[bot.perspective ?? 0];
       
-      const moderationPrompt = moderationEnabled 
-        ? "STRICTLY avoid any adult content, pornography, gambling links, illegal substances, or violence." 
-        : "";
-
       const prompt = `Research current events about ${bot.niche}. 
-      CRITICAL INSTRUCTION: Write this entire article strictly from the perspective of ${perspectiveText}. 
-      The tone, arguments, and conclusions must reflect this specific political/economic viewpoint.
-      ${moderationPrompt} 
-      Write a complete blog post in HTML format. Use <h1> for the title and <p> for paragraphs. 
-      The category is ${bot.category}.`;
+      Write a high-quality article strictly from the perspective of ${perspectiveText}. 
+      Format: HTML. Use <h1> for title and <p> for body.`;
 
-      const searchResponse = await ai.models.generateContent({
+      const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }]
-        }
+        config: { tools: [{ googleSearch: {} }] }
       });
 
-      const fullText = searchResponse.text;
-      const titleMatch = fullText.match(/<h1>(.*?)<\/h1>/);
-      const title = titleMatch ? titleMatch[1] : `${bot.niche} Report`;
-      const cleanContent = fullText.replace(/<h1>.*?<\/h1>/, '');
-
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("No active session");
+      const fullText = response.text || '';
+      const titleMatch = fullText.match(/<h1>(.*?)<\/h1>/);
+      const title = titleMatch ? titleMatch[1] : `${bot.niche} Update`;
+      const content = fullText.replace(/<h1>.*?<\/h1>/, '');
 
       const { error: postError } = await supabase.from('posts').insert({
         title,
-        content: cleanContent,
+        content,
         status: 'publish',
-        author_id: session.user.id,
+        author_id: session?.user?.id,
         journalist_id: bot.id, 
         type: 'post',
-        category_id: null,
         slug: title.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-') + '-' + Date.now().toString().slice(-4)
       });
 
@@ -186,10 +191,9 @@ const JournalistsView: React.FC = () => {
       await supabase.from('journalists').update({ last_run: now }).eq('id', bot.id);
       setBots(prev => prev.map(b => b.id === bot.id ? { ...b, last_run: now } : b));
 
-      alert(`Published: "${title}"\nReporter: ${bot.name} (${perspectiveText})`);
+      alert(`Published: "${title}" is live.`);
     } catch (err: any) {
-      console.error("Bot Error:", err);
-      alert("Execution Failed: " + (err.message || "Unknown error"));
+      alert("Intelligence Run Failed: " + err.message);
     } finally {
       setIsDeploying(null);
     }
@@ -198,63 +202,64 @@ const JournalistsView: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-[#f1f1f1]">
       <AdminSidebar onLogout={() => navigate('/login')} />
-      <main className="flex-1 p-10">
-        <div className="flex justify-between items-center mb-10">
+      <main className="flex-1 p-6 lg:p-10 max-w-7xl mx-auto">
+        <header className="flex justify-between items-center mb-12">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800 font-serif">AI Journalists</h1>
-            <p className="text-gray-400 text-sm mt-1 italic uppercase tracking-widest font-bold">Newsroom Automated Intelligence</p>
+            <h1 className="text-4xl font-black text-gray-900 font-serif">AI Journalists</h1>
+            <p className="text-gray-400 text-xs font-bold uppercase tracking-[0.3em] mt-2">Neural Logic Engine</p>
           </div>
           <button 
             onClick={() => handleOpenModal()}
-            className="bg-[#0073aa] text-white px-6 py-2 rounded text-xs font-black uppercase tracking-widest shadow-md hover:bg-[#005a87] transition-all"
+            className="bg-[#0073aa] text-white px-8 py-3 rounded-sm text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-[#005a87] transition-all"
           >
-            Hire New Bot
+            Hire Reporter
           </button>
-        </div>
+        </header>
 
         {loading ? (
-          <div className="text-center py-20 text-gray-400 italic font-serif">Syncing automated newsroom...</div>
+          <div className="py-20 text-center text-gray-400 font-serif italic">Syncing newsroom personalities...</div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {bots.map(bot => (
-              <div key={bot.id} className="bg-white border border-gray-200 rounded p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+              <div key={bot.id} className="bg-white border border-gray-100 rounded shadow-sm hover:shadow-md transition-all relative overflow-hidden flex flex-col group">
                 <div className={`absolute top-0 right-0 w-1.5 h-full ${
-                    (bot.perspective ?? 0) < 0 ? 'bg-red-500' : (bot.perspective ?? 0) > 0 ? 'bg-blue-500' : 'bg-gray-300'
+                  (bot.perspective ?? 0) < 0 ? 'bg-red-500' : (bot.perspective ?? 0) > 0 ? 'bg-blue-600' : 'bg-gray-300'
                 }`}></div>
-                
-                <div className="flex items-start gap-4 mb-4">
-                    <div className="w-14 h-14 rounded-full overflow-hidden bg-gray-100 border border-gray-100 shrink-0 shadow-sm">
-                        <img 
-                            src={bot.gender === 'male' ? AVATAR_URLS.male : AVATAR_URLS.female} 
-                            alt={bot.name}
-                            className="w-full h-full object-cover grayscale-[0.3] group-hover:grayscale-0 transition-all"
-                            onError={(e) => {
-                                (e.target as HTMLImageElement).src = 'https://picsum.photos/150/150';
-                            }}
-                        />
-                    </div>
-                    <div>
-                        <h3 className="text-xl font-bold text-gray-800 leading-tight font-serif">{bot.name}</h3>
-                        <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest">{bot.category} Reporter</p>
-                    </div>
+
+                <div className="p-8 pb-4 flex items-center gap-5">
+                  <div className="w-16 h-16 rounded-full overflow-hidden border-4 border-gray-50 shadow-inner bg-gray-100 shrink-0">
+                    <img 
+                      src={bot.gender === 'male' ? AVATAR_URLS.male : AVATAR_URLS.female} 
+                      alt={bot.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-2xl font-black text-gray-900 font-serif leading-none mb-1 truncate">{bot.name}</h3>
+                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest truncate">
+                      {bot.category} Reporter
+                    </p>
+                  </div>
                 </div>
 
-                <div className="mb-6 p-3 bg-gray-50 rounded border border-gray-100">
-                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-tighter mb-1">Niche Focus</p>
-                    <p className="text-xs font-bold text-gray-700 truncate">{bot.niche}</p>
+                <div className="px-8 flex-1">
+                  <div className="bg-[#f8f9fa] border border-gray-100 rounded p-5 mb-8">
+                    <h4 className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Niche Focus</h4>
+                    <p className="text-sm font-bold text-gray-800 leading-tight">{bot.niche}</p>
+                  </div>
                 </div>
 
-                <div className="flex gap-2 pt-4">
+                <div className="p-8 pt-0 flex gap-2">
                   <button 
                     onClick={() => handleRunBot(bot)}
                     disabled={!!isDeploying}
-                    className="flex-1 bg-[#1d2327] text-white py-2.5 rounded text-[10px] font-black uppercase tracking-widest hover:bg-black disabled:opacity-50 transition-all shadow-md active:scale-95"
+                    className="flex-1 bg-[#1d2327] text-white py-4 rounded text-[10px] font-black uppercase tracking-widest hover:bg-black disabled:opacity-50 transition-all shadow-md active:scale-95"
                   >
-                    {isDeploying === bot.id ? 'Deploying...' : 'Run Intelligence'}
+                    {isDeploying === bot.id ? 'Running Intelligence...' : 'Run Intelligence'}
                   </button>
                   <button 
                     onClick={() => handleOpenModal(bot)}
-                    className="px-4 py-2.5 bg-gray-100 rounded text-[10px] font-black uppercase tracking-widest text-gray-600 hover:bg-gray-200 transition-colors"
+                    className="px-6 py-4 bg-gray-100 rounded text-[10px] font-black uppercase tracking-widest text-gray-500 hover:bg-gray-200 transition-all"
                   >
                     Edit
                   </button>
@@ -265,46 +270,56 @@ const JournalistsView: React.FC = () => {
         )}
 
         {showConfigModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-            <div className="bg-white p-10 rounded-lg max-w-lg w-full shadow-2xl border-t-8 border-gray-900 animate-in fade-in zoom-in duration-200">
-              <h2 className="text-2xl font-bold mb-1 font-serif text-gray-800">Bot Logic Engine</h2>
-              <p className="text-gray-400 text-[10px] mb-8 uppercase font-bold tracking-[0.2em]">Neural Network Configuration</p>
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[100] backdrop-blur-sm">
+            <div className="bg-white p-10 rounded shadow-2xl max-w-lg w-full border-t-8 border-gray-900 animate-in fade-in zoom-in duration-200">
+              <header className="mb-8">
+                <h2 className="text-3xl font-black text-gray-900 font-serif leading-none">{editingBot ? 'Edit Reporter' : 'Hire Reporter'}</h2>
+                <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mt-2">Logic Calibration</p>
+              </header>
               
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-[10px] font-black uppercase text-gray-500 mb-2">Bot Name</label>
-                        <input 
-                            type="text" className="w-full border-2 border-gray-100 p-3 rounded outline-none focus:border-blue-500 text-sm font-bold bg-gray-50" 
-                            placeholder="e.g. RedBot" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-[10px] font-black uppercase text-gray-500 mb-2">Gender / Avatar</label>
-                        <select 
-                            className="w-full border-2 border-gray-100 p-3 rounded text-sm bg-gray-50 font-bold outline-none"
-                            value={formData.gender} onChange={e => setFormData({ ...formData, gender: e.target.value as any })}
-                        >
-                            <option value="female">Female Persona</option>
-                            <option value="male">Male Persona</option>
-                        </select>
-                    </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Public Name</label>
+                    <input 
+                      type="text" className="w-full border-2 border-gray-50 bg-gray-50 p-3 rounded font-bold text-sm outline-none focus:border-blue-500 transition-all" 
+                      placeholder="e.g. Gemma" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Avatar Gender</label>
+                    <select 
+                      className="w-full border-2 border-gray-50 bg-gray-50 p-3 rounded font-bold text-sm outline-none"
+                      value={formData.gender} onChange={e => setFormData({ ...formData, gender: e.target.value as any })}
+                    >
+                      <option value="female">Female Portrait</option>
+                      <option value="male">Male Portrait</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Niche Focus</label>
+                  <input 
+                    type="text" className="w-full border-2 border-gray-50 bg-gray-50 p-3 rounded font-bold text-sm outline-none focus:border-blue-500 transition-all" 
+                    placeholder="e.g. Geopolitics" value={formData.niche} onChange={e => setFormData({ ...formData, niche: e.target.value })}
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-black uppercase text-gray-500 mb-2">Category</label>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Category</label>
                     <select 
-                      className="w-full border-2 border-gray-100 p-3 rounded text-sm bg-gray-50 font-bold outline-none"
+                      className="w-full border-2 border-gray-50 bg-gray-50 p-3 rounded font-bold text-sm outline-none"
                       value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}
                     >
                       {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black uppercase text-gray-500 mb-2">Schedule</label>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Frequency</label>
                     <select 
-                      className="w-full border-2 border-gray-100 p-3 rounded text-sm bg-gray-50 font-bold outline-none"
+                      className="w-full border-2 border-gray-50 bg-gray-50 p-3 rounded font-bold text-sm outline-none"
                       value={formData.schedule} onChange={e => setFormData({ ...formData, schedule: e.target.value })}
                     >
                       {FREQUENCIES.map(freq => <option key={freq.id} value={freq.id}>{freq.label}</option>)}
@@ -312,46 +327,30 @@ const JournalistsView: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
-                    <label className="block text-[10px] font-black uppercase text-gray-500 mb-2">Focus Niche</label>
-                    <input 
-                        type="text" className="w-full border-2 border-gray-100 p-3 rounded outline-none focus:border-blue-500 text-sm bg-gray-50" 
-                        placeholder="e.g. Tax Reform, Crypto" value={formData.niche} onChange={e => setFormData({ ...formData, niche: e.target.value })}
-                    />
-                </div>
-
-                <div className="pt-4 pb-2">
-                    <div className="flex justify-between items-center mb-4">
-                        <label className="block text-[10px] font-black uppercase text-gray-500 tracking-widest">Political Orientation</label>
-                        <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-tighter ${
-                            formData.perspective < 0 ? 'bg-red-600 text-white' : formData.perspective > 0 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'
-                        }`}>
-                            {SPECTRUM_LABELS[formData.perspective]}
-                        </span>
-                    </div>
-                    <div className="relative pt-1 px-2">
-                        <input 
-                            type="range" min="-3" max="3" step="1"
-                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-gray-900"
-                            value={formData.perspective}
-                            onChange={e => setFormData({ ...formData, perspective: parseInt(e.target.value) })}
-                        />
-                        <div className="flex justify-between mt-2 text-[8px] font-black text-gray-300 uppercase">
-                            <span>Anarchism</span>
-                            <span>Moderate</span>
-                            <span>Reactionary</span>
-                        </div>
-                    </div>
+                <div className="pt-4 border-t border-gray-50">
+                  <div className="flex justify-between items-center mb-4">
+                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-widest">Bias Bias / Perspective</label>
+                    <span className="text-[10px] font-black bg-gray-900 text-white px-3 py-1 rounded-full uppercase">
+                      {SPECTRUM_LABELS[formData.perspective]}
+                    </span>
+                  </div>
+                  <input 
+                    type="range" min="-3" max="3" step="1"
+                    className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-gray-900"
+                    value={formData.perspective}
+                    onChange={e => setFormData({ ...formData, perspective: parseInt(e.target.value) })}
+                  />
                 </div>
               </div>
               
               <div className="flex justify-end gap-3 mt-10 pt-6 border-t border-gray-50">
-                <button onClick={() => setShowConfigModal(false)} className="text-gray-400 font-black uppercase text-[10px] tracking-widest px-4">Close</button>
+                <button onClick={() => setShowConfigModal(false)} className="text-gray-400 font-bold uppercase text-[10px] tracking-widest px-4">Cancel</button>
                 <button 
                   onClick={handleSaveBot} 
-                  className="bg-gray-900 text-white px-10 py-3 rounded font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all shadow-xl active:scale-95"
+                  disabled={isSaving}
+                  className="bg-gray-900 text-white px-10 py-3 rounded-sm font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all shadow-xl active:scale-95 disabled:opacity-50"
                 >
-                  {editingBot ? 'Commit Logic' : 'Initiate Bot'}
+                  {isSaving ? 'Saving...' : 'Commit Logic'}
                 </button>
               </div>
             </div>

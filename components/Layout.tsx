@@ -11,6 +11,7 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [navPages, setNavPages] = useState<{title: string, slug: string}[]>([]);
   const [settings, setSettings] = useState({
     title: 'Twenty Ten',
@@ -26,6 +27,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       // Auth check
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
+        setIsLoggedIn(true);
         const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
         if (profile?.role === 'admin' || profile?.role === 'editor') setIsAdmin(true);
       }
@@ -66,8 +68,28 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-[#e9eaee] font-sans text-gray-800">
-      <div className="max-w-[940px] mx-auto bg-white shadow-xl min-h-screen border-x border-gray-200">
+      <div className="max-w-[940px] mx-auto bg-white shadow-xl min-h-screen border-x border-gray-200 relative">
         
+        {/* User Login Icon - Top Right */}
+        <div className="absolute top-6 right-10 z-10">
+          <Link 
+            to={isLoggedIn ? "/admin" : "/login"} 
+            className="group flex flex-col items-center gap-1"
+            title={isLoggedIn ? "Access Dashboard" : "Sign In"}
+          >
+            <div className="w-10 h-10 rounded-full bg-white/50 border border-gray-200 p-1 group-hover:bg-blue-50 transition-all overflow-hidden">
+               <img 
+                 src="https://images.rawpixel.com/image_png_800/cHJpdmF0ZS9sci9pbWFnZXMvd2Vic2l0ZS8yMDIzLTAxL3JtNjA5LXNvbGlkaWNvbi13LTAwMi1wLnBuZw.png" 
+                 alt="User Profile" 
+                 className="w-full h-full object-contain opacity-60 group-hover:opacity-100 transition-opacity"
+               />
+            </div>
+            <span className="text-[8px] font-black uppercase tracking-tighter text-gray-400 group-hover:text-blue-600">
+              {isLoggedIn ? "Dashboard" : "Login"}
+            </span>
+          </Link>
+        </div>
+
         <header className="p-10 pt-16">
           <Link to="/" className="inline-block group">
             <h1 className="text-4xl font-black text-gray-900 leading-none mb-2 font-serif group-hover:text-blue-700 transition-colors">

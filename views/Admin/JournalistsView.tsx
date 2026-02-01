@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
 import { GoogleGenAI } from "@google/genai";
@@ -20,11 +20,11 @@ interface Bot {
 const CATEGORIES = ['Politics', 'Economics', 'Technology', 'Health', 'Business', 'Lifestyle', 'Travel', 'Food', 'General'];
 
 const FREQUENCIES = [
-  { id: '6h', label: 'Every 6 Hours' },
-  { id: '24h', label: 'Once Daily' },
-  { id: '2w', label: 'Twice Weekly' },
-  { id: '1w', label: 'Once a Week' },
-  { id: '1m', label: 'Once a Month' }
+  { id: '6h', label: 'Every 6 Hours', hours: 6 },
+  { id: '24h', label: 'Once Daily', hours: 24 },
+  { id: '2w', label: 'Twice Weekly', hours: 84 },
+  { id: '1w', label: 'Once a Week', hours: 168 },
+  { id: '1m', label: 'Once a Month', hours: 720 }
 ];
 
 const SPECTRUM_LABELS: Record<number, string> = {
@@ -50,6 +50,7 @@ const JournalistsView: React.FC = () => {
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [editingBot, setEditingBot] = useState<Bot | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [now, setNow] = useState(new Date());
   
   const [formData, setFormData] = useState({
     name: '',
@@ -59,6 +60,12 @@ const JournalistsView: React.FC = () => {
     perspective: 0,
     gender: 'female' as 'male' | 'female'
   });
+
+  // Ticker for countdowns
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     fetchBots();
@@ -70,8 +77,9 @@ const JournalistsView: React.FC = () => {
       const { data, error } = await supabase.from('journalists').select('*');
       if (!error && data && data.length > 0) {
         setBots(data);
+        // Check for "Due" bots to run automated logic
+        checkAndRunDueBots(data);
       } else {
-        // Humanized Defaults per user request
         setBots([
           { id: 'gemma-bot-uuid', name: 'Gemma', niche: 'Global Governance', category: 'Politics', schedule: '24h', status: 'active', last_run: null, perspective: 0, gender: 'female' },
           { id: 'gary-bot-uuid', name: 'Gary', niche: 'Macro Economics', category: 'Economics', schedule: '24h', status: 'active', last_run: null, perspective: 1, gender: 'male' }
@@ -82,6 +90,24 @@ const JournalistsView: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const calculateNextRun = (bot: Bot) => {
+    if (!bot.last_run) return new Date();
+    const freq = FREQUENCIES.find(f => f.id === bot.schedule) || FREQUENCIES[1];
+    const last = new Date(bot.last_run);
+    return new Date(last.getTime() + freq.hours * 60 * 60 * 1000);
+  };
+
+  const checkAndRunDueBots = (botsList: Bot[]) => {
+    botsList.forEach(bot => {
+      if (bot.id.includes('-bot-uuid')) return; // Don't auto-run demo bots
+      const next = calculateNextRun(bot);
+      if (next <= new Date() && bot.status === 'active') {
+        console.log(`Bot ${bot.name} is due for a post. Triggering automated intelligence...`);
+        handleRunBot(bot, true);
+      }
+    });
   };
 
   const handleOpenModal = (bot: Bot | null = null) => {
@@ -103,16 +129,10 @@ const JournalistsView: React.FC = () => {
   };
 
   const handleSaveBot = async () => {
-    // VALIDATION
     if (!formData.name.trim() || formData.name.length < 2) {
-      alert("Validation Error: Please provide a valid Name for the reporter.");
+      alert("Validation Error: Name required.");
       return;
     }
-    if (!formData.niche.trim() || formData.niche.length < 3) {
-      alert("Validation Error: Niche Focus is required to define editorial logic.");
-      return;
-    }
-
     setIsSaving(true);
     try {
       const payload: any = {
@@ -126,31 +146,25 @@ const JournalistsView: React.FC = () => {
       };
 
       let result;
-      // If we are editing a MOCK bot, we must INSERT it to create a real DB entry
       const isMockId = editingBot?.id.includes('-bot-uuid');
-
       if (editingBot && !isMockId) {
         result = await supabase.from('journalists').update(payload).eq('id', editingBot.id);
       } else {
         result = await supabase.from('journalists').insert([payload]);
       }
-
       if (result.error) throw result.error;
-
-      await fetchBots(); // Refresh state from source of truth
+      await fetchBots();
       setShowConfigModal(false);
-      alert(`Logic committed: ${formData.name} is now synchronized with the newsroom.`);
     } catch (err: any) {
-      console.error("Save error:", err);
-      alert("Save Failed: " + (err.message || "Ensure your database has a 'journalists' table with the correct columns."));
+      alert("Save Failed: " + err.message);
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleRunBot = async (bot: Bot) => {
+  const handleRunBot = async (bot: Bot, silent: boolean = false) => {
     if (bot.id.includes('-bot-uuid')) {
-      alert("Configuration Required: This is a demo reporter. Click 'Edit' then 'Commit Logic' to save this reporter to your database before running.");
+      if (!silent) alert("Demo Bot: Please edit and commit logic first.");
       return;
     }
 
@@ -160,8 +174,9 @@ const JournalistsView: React.FC = () => {
       const perspectiveText = SPECTRUM_LABELS[bot.perspective ?? 0];
       
       const prompt = `Research current events about ${bot.niche}. 
-      Write a high-quality article strictly from the perspective of ${perspectiveText}. 
-      Format: HTML. Use <h1> for title and <p> for body.`;
+      Write a professional, detailed news article from the perspective of ${perspectiveText}.
+      Target Category: ${bot.category}.
+      Format: HTML. Use <h1> for title and <p> for body. Use blockquotes for sources.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -169,34 +184,46 @@ const JournalistsView: React.FC = () => {
         config: { tools: [{ googleSearch: {} }] }
       });
 
-      const { data: { session } } = await supabase.auth.getSession();
       const fullText = response.text || '';
       const titleMatch = fullText.match(/<h1>(.*?)<\/h1>/);
       const title = titleMatch ? titleMatch[1] : `${bot.niche} Update`;
       const content = fullText.replace(/<h1>.*?<\/h1>/, '');
 
+      const { data: { session } } = await supabase.auth.getSession();
       const { error: postError } = await supabase.from('posts').insert({
         title,
         content,
         status: 'publish',
         author_id: session?.user?.id,
         journalist_id: bot.id, 
+        category_id: null, // Should ideally match category name to id
         type: 'post',
         slug: title.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-') + '-' + Date.now().toString().slice(-4)
       });
 
       if (postError) throw postError;
 
-      const now = new Date().toISOString();
-      await supabase.from('journalists').update({ last_run: now }).eq('id', bot.id);
-      setBots(prev => prev.map(b => b.id === bot.id ? { ...b, last_run: now } : b));
+      const updatedTime = new Date().toISOString();
+      await supabase.from('journalists').update({ last_run: updatedTime }).eq('id', bot.id);
+      setBots(prev => prev.map(b => b.id === bot.id ? { ...b, last_run: updatedTime } : b));
 
-      alert(`Published: "${title}" is live.`);
+      if (!silent) alert(`Broadcast Successful: "${title}" is now live.`);
     } catch (err: any) {
-      alert("Intelligence Run Failed: " + err.message);
+      if (!silent) alert("Intelligence Failure: " + err.message);
     } finally {
       setIsDeploying(null);
     }
+  };
+
+  const getCountdown = (bot: Bot) => {
+    const next = calculateNextRun(bot);
+    const diff = next.getTime() - now.getTime();
+    if (diff <= 0) return "DUE NOW";
+    
+    const h = Math.floor(diff / (1000 * 60 * 60));
+    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const s = Math.floor((diff % (1000 * 60)) / 1000);
+    return `${h}h ${m}m ${s}s`;
   };
 
   return (
@@ -205,25 +232,26 @@ const JournalistsView: React.FC = () => {
       <main className="flex-1 p-6 lg:p-10 max-w-7xl mx-auto">
         <header className="flex justify-between items-center mb-12">
           <div>
-            <h1 className="text-4xl font-black text-gray-900 font-serif">AI Journalists</h1>
-            <p className="text-gray-400 text-xs font-bold uppercase tracking-[0.3em] mt-2">Neural Logic Engine</p>
+            <h1 className="text-4xl font-black text-gray-900 font-serif leading-tight">AI Newsroom</h1>
+            <p className="text-gray-400 text-xs font-bold uppercase tracking-[0.4em] mt-2">Autonomous Editorial Intelligence</p>
           </div>
           <button 
             onClick={() => handleOpenModal()}
             className="bg-[#0073aa] text-white px-8 py-3 rounded-sm text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-[#005a87] transition-all"
           >
-            Hire Reporter
+            Commission Reporter
           </button>
         </header>
 
-        {loading ? (
-          <div className="py-20 text-center text-gray-400 font-serif italic">Syncing newsroom personalities...</div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {bots.map(bot => (
-              <div key={bot.id} className="bg-white border border-gray-100 rounded shadow-sm hover:shadow-md transition-all relative overflow-hidden flex flex-col group">
-                <div className={`absolute top-0 right-0 w-1.5 h-full ${
-                  (bot.perspective ?? 0) < 0 ? 'bg-red-500' : (bot.perspective ?? 0) > 0 ? 'bg-blue-600' : 'bg-gray-300'
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {bots.map(bot => {
+            const nextRun = calculateNextRun(bot);
+            const isDue = nextRun <= now;
+            
+            return (
+              <div key={bot.id} className="bg-white border border-gray-100 rounded shadow-sm hover:shadow-xl transition-all relative overflow-hidden flex flex-col group">
+                <div className={`absolute top-0 right-0 w-2 h-full ${
+                  isDue ? 'bg-orange-500 animate-pulse' : (bot.perspective ?? 0) < 0 ? 'bg-red-500' : 'bg-blue-600'
                 }`}></div>
 
                 <div className="p-8 pb-4 flex items-center gap-5">
@@ -231,7 +259,7 @@ const JournalistsView: React.FC = () => {
                     <img 
                       src={bot.gender === 'male' ? AVATAR_URLS.male : AVATAR_URLS.female} 
                       alt={bot.name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all duration-500"
                     />
                   </div>
                   <div className="min-w-0">
@@ -243,9 +271,24 @@ const JournalistsView: React.FC = () => {
                 </div>
 
                 <div className="px-8 flex-1">
-                  <div className="bg-[#f8f9fa] border border-gray-100 rounded p-5 mb-8">
-                    <h4 className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Niche Focus</h4>
+                  <div className="bg-[#f8f9fa] border border-gray-100 rounded-lg p-5 mb-4">
+                    <h4 className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Beat Focus</h4>
                     <p className="text-sm font-bold text-gray-800 leading-tight">{bot.niche}</p>
+                  </div>
+                  
+                  <div className="flex justify-between items-center px-1 mb-8">
+                    <div>
+                      <h4 className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Next Broadcast</h4>
+                      <p className={`text-xs font-black font-mono ${isDue ? 'text-orange-600' : 'text-gray-900'}`}>
+                        {getCountdown(bot)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <h4 className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Schedule</h4>
+                      <p className="text-[10px] font-bold text-gray-500">
+                        {FREQUENCIES.find(f => f.id === bot.schedule)?.label}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -255,7 +298,7 @@ const JournalistsView: React.FC = () => {
                     disabled={!!isDeploying}
                     className="flex-1 bg-[#1d2327] text-white py-4 rounded text-[10px] font-black uppercase tracking-widest hover:bg-black disabled:opacity-50 transition-all shadow-md active:scale-95"
                   >
-                    {isDeploying === bot.id ? 'Running Intelligence...' : 'Run Intelligence'}
+                    {isDeploying === bot.id ? 'Broadcasting...' : 'Deploy Now'}
                   </button>
                   <button 
                     onClick={() => handleOpenModal(bot)}
@@ -265,56 +308,26 @@ const JournalistsView: React.FC = () => {
                   </button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+            );
+          })}
+        </div>
 
         {showConfigModal && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[100] backdrop-blur-sm">
-            <div className="bg-white p-10 rounded shadow-2xl max-w-lg w-full border-t-8 border-gray-900 animate-in fade-in zoom-in duration-200">
+            <div className="bg-white p-10 rounded shadow-2xl max-w-lg w-full border-t-8 border-gray-900">
               <header className="mb-8">
-                <h2 className="text-3xl font-black text-gray-900 font-serif leading-none">{editingBot ? 'Edit Reporter' : 'Hire Reporter'}</h2>
-                <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mt-2">Logic Calibration</p>
+                <h2 className="text-3xl font-black text-gray-900 font-serif leading-none">Calibrate Intelligence</h2>
+                <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mt-2">Editorial Scheduling & Parameters</p>
               </header>
               
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Public Name</label>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Reporter Name</label>
                     <input 
                       type="text" className="w-full border-2 border-gray-50 bg-gray-50 p-3 rounded font-bold text-sm outline-none focus:border-blue-500 transition-all" 
-                      placeholder="e.g. Gemma" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
+                      value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
                     />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Avatar Gender</label>
-                    <select 
-                      className="w-full border-2 border-gray-50 bg-gray-50 p-3 rounded font-bold text-sm outline-none"
-                      value={formData.gender} onChange={e => setFormData({ ...formData, gender: e.target.value as any })}
-                    >
-                      <option value="female">Female Portrait</option>
-                      <option value="male">Male Portrait</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Niche Focus</label>
-                  <input 
-                    type="text" className="w-full border-2 border-gray-50 bg-gray-50 p-3 rounded font-bold text-sm outline-none focus:border-blue-500 transition-all" 
-                    placeholder="e.g. Geopolitics" value={formData.niche} onChange={e => setFormData({ ...formData, niche: e.target.value })}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Category</label>
-                    <select 
-                      className="w-full border-2 border-gray-50 bg-gray-50 p-3 rounded font-bold text-sm outline-none"
-                      value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}
-                    >
-                      {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                    </select>
                   </div>
                   <div>
                     <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Frequency</label>
@@ -327,9 +340,39 @@ const JournalistsView: React.FC = () => {
                   </div>
                 </div>
 
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Niche Focus (Beats)</label>
+                  <input 
+                    type="text" className="w-full border-2 border-gray-50 bg-gray-50 p-3 rounded font-bold text-sm outline-none focus:border-blue-500 transition-all" 
+                    value={formData.niche} onChange={e => setFormData({ ...formData, niche: e.target.value })}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Primary Category</label>
+                    <select 
+                      className="w-full border-2 border-gray-50 bg-gray-50 p-3 rounded font-bold text-sm outline-none"
+                      value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}
+                    >
+                      {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Persona Portrait</label>
+                    <select 
+                      className="w-full border-2 border-gray-50 bg-gray-50 p-3 rounded font-bold text-sm outline-none"
+                      value={formData.gender} onChange={e => setFormData({ ...formData, gender: e.target.value as any })}
+                    >
+                      <option value="female">Gemma (Female)</option>
+                      <option value="male">Gary (Male)</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="pt-4 border-t border-gray-50">
                   <div className="flex justify-between items-center mb-4">
-                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-widest">Bias Bias / Perspective</label>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 tracking-widest">Bias / Perspective</label>
                     <span className="text-[10px] font-black bg-gray-900 text-white px-3 py-1 rounded-full uppercase">
                       {SPECTRUM_LABELS[formData.perspective]}
                     </span>
@@ -348,9 +391,9 @@ const JournalistsView: React.FC = () => {
                 <button 
                   onClick={handleSaveBot} 
                   disabled={isSaving}
-                  className="bg-gray-900 text-white px-10 py-3 rounded-sm font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all shadow-xl active:scale-95 disabled:opacity-50"
+                  className="bg-gray-900 text-white px-10 py-3 rounded-sm font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all shadow-xl"
                 >
-                  {isSaving ? 'Saving...' : 'Commit Logic'}
+                  {isSaving ? 'Syncing...' : 'Commit Logic'}
                 </button>
               </div>
             </div>

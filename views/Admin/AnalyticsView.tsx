@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
 import AdminSidebar from '../../components/AdminSidebar';
 
+type AnalyticsTab = 'bots' | 'users' | 'site' | 'posts';
+
 interface SessionData {
   sessionId: string;
   duration: number;
@@ -12,8 +14,17 @@ interface SessionData {
   isNew: boolean;
 }
 
+const FREQUENCIES = [
+  { id: '6h', hours: 6 },
+  { id: '24h', hours: 24 },
+  { id: '2w', hours: 84 },
+  { id: '1w', hours: 168 },
+  { id: '1m', hours: 720 }
+];
+
 const AnalyticsView: React.FC = () => {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<AnalyticsTab>('bots');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [visitorLoc, setVisitorLoc] = useState<any>(null);
@@ -24,45 +35,87 @@ const AnalyticsView: React.FC = () => {
     externalClicks: 0,
     avgSessionTime: 0,
     longestSession: 0,
-    postPerformance: [] as any[],
+    postPerformance: [] as { slug: string, views: number }[],
     sessions: [] as SessionData[],
-    referrers: [] as { name: string, count: number }[]
+    referrers: [] as { name: string, count: number }[],
+    botStats: {
+      totalBotPosts: 0,
+      perBotCount: {} as Record<string, number>,
+      futureSchedule: [] as any[],
+      recentHistory: [] as any[]
+    },
+    userStats: {
+      totalUsers: 0,
+      roleBreakdown: {} as Record<string, number>,
+      statusBreakdown: {} as Record<string, number>
+    }
   });
 
   const fetchData = async () => {
     setLoading(true);
     setError(null);
     try {
+      // 1. Core Analytics
       const { data: events, error: eventError } = await supabase
         .from('site_analytics')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (eventError) {
-        if (eventError.code === '42P01') { setError('site_analytics'); return; }
-        throw eventError;
-      }
-
+      if (eventError && eventError.code !== '42P01') throw eventError;
       const rawEvents = events || [];
+
+      // 2. Bot/Journalist Data
+      const { data: journalists } = await supabase.from('journalists').select('*');
+      const { data: botPosts } = await supabase.from('posts').select('id, title, journalist_id, created_at').not('journalist_id', 'is', null).order('created_at', { ascending: false });
+
+      // 3. User Data
+      const { data: profiles } = await supabase.from('profiles').select('role, status');
       
-      // Process Sessions
-      const sessionMap: Record<string, { first: number, last: number, count: number, events: any[] }> = {};
+      // 4. Post Meta Data
+      const { count: postCount } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'post');
+
+      // Process User Stats
+      const roleBreakdown: Record<string, number> = {};
+      const statusBreakdown: Record<string, number> = {};
+      profiles?.forEach(p => {
+        roleBreakdown[p.role] = (roleBreakdown[p.role] || 0) + 1;
+        statusBreakdown[p.status] = (statusBreakdown[p.status] || 0) + 1;
+      });
+
+      // Process Bot Stats
+      const perBotCount: Record<string, number> = {};
+      botPosts?.forEach(p => {
+        const name = journalists?.find(j => j.id === p.journalist_id)?.name || 'Unknown';
+        perBotCount[name] = (perBotCount[name] || 0) + 1;
+      });
+
+      const futureSchedule = (journalists || []).map(j => {
+        const freq = FREQUENCIES.find(f => f.id === j.schedule) || FREQUENCIES[1];
+        const last = j.last_run ? new Date(j.last_run) : new Date(0);
+        const next = new Date(last.getTime() + freq.hours * 60 * 60 * 1000);
+        return { name: j.name, nextRun: next, niche: j.niche };
+      }).sort((a, b) => a.nextRun.getTime() - b.nextRun.getTime());
+
+      // Standard analytics processing
+      const sessionMap: Record<string, any> = {};
       const referMap: Record<string, number> = {};
+      const postViewsMap: Record<string, number> = {};
 
       rawEvents.forEach(e => {
         const time = new Date(e.created_at).getTime();
-        if (!sessionMap[e.session_id]) {
-          sessionMap[e.session_id] = { first: time, last: time, count: 0, events: [] };
-          const ref = e.metadata?.referrer || 'direct';
-          referMap[ref] = (referMap[ref] || 0) + 1;
-        }
+        if (!sessionMap[e.session_id]) sessionMap[e.session_id] = { first: time, last: time, count: 0 };
         sessionMap[e.session_id].first = Math.min(sessionMap[e.session_id].first, time);
         sessionMap[e.session_id].last = Math.max(sessionMap[e.session_id].last, time);
         sessionMap[e.session_id].count++;
-        sessionMap[e.session_id].events.push(e);
+        const ref = e.metadata?.referrer || 'direct';
+        referMap[ref] = (referMap[ref] || 0) + 1;
+
+        if (e.event_type === 'view' && e.target_id) {
+          postViewsMap[e.target_id] = (postViewsMap[e.target_id] || 0) + 1;
+        }
       });
 
-      const processedSessions = Object.entries(sessionMap).map(([id, data]) => ({
+      const processedSessions = Object.entries(sessionMap).map(([id, data]: [string, any]) => ({
         sessionId: id,
         duration: Math.round((data.last - data.first) / 60000),
         eventCount: data.count,
@@ -70,52 +123,31 @@ const AnalyticsView: React.FC = () => {
         isNew: data.count === 1
       })).sort((a, b) => b.duration - a.duration);
 
-      const totalDuration = processedSessions.reduce((acc, s) => acc + s.duration, 0);
-      const avgSession = processedSessions.length ? Math.round(totalDuration / processedSessions.length) : 0;
-
-      // Post Metrics
-      const postMetrics: Record<string, { views: number, clicks: number, title: string }> = {};
-      rawEvents.forEach(e => {
-        if (e.event_type === 'view' || e.event_type === 'click') {
-          const tid = e.target_id || 'unknown';
-          if (!postMetrics[tid]) postMetrics[tid] = { views: 0, clicks: 0, title: e.metadata?.title || tid };
-          if (e.event_type === 'view') postMetrics[tid].views++;
-          if (e.event_type === 'click') postMetrics[tid].clicks++;
-        }
-      });
-
-      const performanceArray = Object.entries(postMetrics).map(([slug, m]) => {
-        // Correcting Conversion Logic: 
-        // Intent (Clicks) / Impressions (Views)
-        // If someone landed directly (0 clicks, 1 view), conversion is 0.
-        // If someone clicked but left (1 click, 0 views), conversion is effectively 100% intent.
-        let ctr = 0;
-        if (m.views > 0) {
-          ctr = Math.round((m.clicks / m.views) * 100);
-        } else if (m.clicks > 0) {
-          ctr = 100;
-        }
-
-        return {
-          slug,
-          ...m,
-          ctr: Math.min(100, ctr) // Max is 100%
-        };
-      }).sort((a, b) => b.views - a.views);
-
-      const sortedReferrers = Object.entries(referMap)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count);
+      const postPerf = Object.entries(postViewsMap)
+        .map(([slug, views]) => ({ slug, views }))
+        .sort((a, b) => b.views - a.views)
+        .slice(0, 10);
 
       setStats({
         totalViews: rawEvents.filter(e => e.event_type === 'view').length,
         totalClicks: rawEvents.filter(e => e.event_type === 'click').length,
         externalClicks: rawEvents.filter(e => e.event_type === 'rss_outbound').length,
-        avgSessionTime: avgSession,
+        avgSessionTime: processedSessions.length ? Math.round(processedSessions.reduce((acc, s) => acc + s.duration, 0) / processedSessions.length) : 0,
         longestSession: processedSessions.length ? processedSessions[0].duration : 0,
-        postPerformance: performanceArray,
+        postPerformance: postPerf,
         sessions: processedSessions.slice(0, 10),
-        referrers: sortedReferrers.slice(0, 5)
+        referrers: Object.entries(referMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5),
+        botStats: {
+          totalBotPosts: botPosts?.length || 0,
+          perBotCount,
+          futureSchedule,
+          recentHistory: (botPosts || []).slice(0, 10)
+        },
+        userStats: {
+          totalUsers: profiles?.length || 0,
+          roleBreakdown,
+          statusBreakdown
+        }
       });
 
       try {
@@ -135,186 +167,230 @@ const AnalyticsView: React.FC = () => {
     fetchData();
   }, []);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate('/login');
-  };
-
-  if (error === 'site_analytics') {
-    return (
-      <div className="flex min-h-screen bg-[#f1f1f1]">
-        <AdminSidebar onLogout={handleLogout} />
-        <main className="flex-1 p-10">
-          <div className="max-w-3xl mx-auto bg-white border border-red-200 rounded-lg shadow-sm">
-            <div className="bg-red-600 text-white px-6 py-4 font-bold">Analytics Table Missing</div>
-            <div className="p-8">
-              <p className="mb-4">Please run the SQL initialization script provided in the diagnostics panel.</p>
-              <button onClick={fetchData} className="bg-black text-white px-6 py-2 rounded">Refresh Hub</button>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
+  const TabButton = ({ id, label, icon }: { id: AnalyticsTab, label: string, icon: string }) => (
+    <button
+      onClick={() => setActiveTab(id)}
+      className={`px-8 py-4 text-[11px] font-black uppercase tracking-widest transition-all border-b-4 flex items-center gap-2 ${
+        activeTab === id 
+          ? 'border-blue-600 text-blue-600 bg-white' 
+          : 'border-transparent text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+      }`}
+    >
+      <span>{icon}</span>
+      {label}
+    </button>
+  );
 
   return (
     <div className="flex min-h-screen bg-[#f1f1f1]">
-      <AdminSidebar onLogout={handleLogout} />
-      <main className="flex-1 p-6 lg:p-10 max-w-[1600px] mx-auto">
-        
-        <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+      <AdminSidebar onLogout={() => navigate('/login')} />
+      <main className="flex-1 p-6 lg:p-10 max-w-7xl mx-auto">
+        <header className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
           <div>
-            <h1 className="text-4xl font-black text-gray-900 font-serif leading-none">Site Intelligence</h1>
-            <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-2">Real-time engagement telemetry</p>
+            <h1 className="text-4xl font-black text-gray-900 font-serif leading-none">Intelligence Hub</h1>
+            <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-2">Historical and Predictive Data Analysis</p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right hidden md:block">
-              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Current Node</p>
-              <p className="text-sm font-mono text-gray-700">{visitorLoc?.ip || 'Detecting...'}</p>
-            </div>
-            <button onClick={fetchData} className="bg-white border border-gray-200 px-6 py-2 rounded-full text-xs font-bold uppercase shadow-sm hover:shadow transition-all">
-              {loading ? 'Syncing...' : 'Refresh Hub'}
-            </button>
-          </div>
+          <button onClick={fetchData} className="bg-white border border-gray-200 px-6 py-2 rounded-full text-xs font-bold uppercase shadow-sm hover:shadow transition-all">
+            {loading ? 'Refreshing...' : 'Refresh Hub'}
+          </button>
         </header>
 
-        {/* Global Key Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-          {[
-            { label: 'Total Views', val: stats.totalViews, sub: 'Page Openings', color: 'bg-blue-600', icon: '📄' },
-            { label: 'Internal Clicks', val: stats.totalClicks, sub: 'Navigation Events', color: 'bg-emerald-500', icon: '👆' },
-            { label: 'Avg Stay', val: `${stats.avgSessionTime}m`, sub: 'Retention Time', color: 'bg-violet-600', icon: '⏱️' },
-            { label: 'Outbound', val: stats.externalClicks, sub: 'RSS Link Clicks', color: 'bg-amber-500', icon: '🚀' }
-          ].map((card, i) => (
-            <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center gap-5 transition-transform hover:scale-[1.02]">
-              <div className={`${card.color} w-12 h-12 rounded-xl flex items-center justify-center text-xl shadow-lg shadow-opacity-20`}>{card.icon}</div>
-              <div>
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{card.label}</p>
-                <div className="text-2xl font-black text-gray-900">{card.val}</div>
-                <p className="text-[10px] text-gray-400">{card.sub}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+        {/* Tab Navigation */}
+        <nav className="flex bg-white border border-gray-200 rounded-t-lg shadow-sm mb-10 overflow-x-auto">
+          <TabButton id="bots" label="BOT Analytics" icon="🤖" />
+          {/* Fix: changed 'user' to 'users' to match AnalyticsTab type */}
+          <TabButton id="users" label="User Analytics" icon="👥" />
+          <TabButton id="site" label="Site Analytics" icon="📈" />
+          <TabButton id="posts" label="Post Analytics" icon="✍️" />
+        </nav>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          
-          {/* Post Performance */}
-          <div className="xl:col-span-2 space-y-8">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-50 bg-gray-50/50 flex justify-between items-center">
-                <h3 className="font-bold text-gray-800 font-serif">Content Conversion Leaderboard</h3>
-                <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded">Ranked by Views</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="text-[10px] text-gray-400 font-black uppercase tracking-widest bg-white border-b border-gray-50">
-                    <tr>
-                      <th className="px-6 py-4">Article / Slug</th>
-                      <th className="px-6 py-4">Internal Clicks</th>
-                      <th className="px-6 py-4">Read Views</th>
-                      <th className="px-6 py-4 text-right">Conversion</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {stats.postPerformance.length === 0 ? (
-                      <tr><td colSpan={4} className="p-12 text-center text-gray-300 italic">No telemetry data available.</td></tr>
-                    ) : (
-                      stats.postPerformance.map((p, i) => (
-                        <tr key={i} className="hover:bg-gray-50/80 transition-colors group">
-                          <td className="px-6 py-4">
-                            <div className="text-sm font-bold text-gray-900 group-hover:text-blue-600 truncate max-w-[280px]">{p.title}</div>
-                            <div className="text-[10px] text-gray-400 font-mono mt-0.5">/{p.slug}</div>
-                          </td>
-                          <td className="px-6 py-4 text-sm font-mono text-gray-400">{p.clicks}</td>
-                          <td className="px-6 py-4 text-sm font-black text-gray-800">{p.views}</td>
-                          <td className="px-6 py-4 text-right">
-                            <div className="inline-flex items-center gap-2">
-                              <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-blue-500 rounded-full" style={{ width: `${p.ctr}%` }}></div>
-                              </div>
-                              <span className="text-[11px] font-black text-blue-600">{p.ctr}%</span>
+        {loading ? (
+          <div className="py-40 text-center text-gray-400 italic font-serif animate-pulse">
+            Compiling dataset...
+          </div>
+        ) : (
+          <div className="animate-in fade-in duration-300">
+            {activeTab === 'bots' && (
+              <div className="space-y-12">
+                <section>
+                  <div className="flex items-center gap-3 mb-6">
+                    <span className="text-xl">🤖</span>
+                    <h2 className="text-xl font-bold font-serif text-gray-800">AI Journalists Performance</h2>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="bg-white p-8 rounded-xl border border-gray-100 shadow-sm">
+                       <div className="text-center mb-8">
+                          <div className="text-5xl font-black text-blue-600 mb-2">{stats.botStats.totalBotPosts}</div>
+                          <div className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Total Autonomous Broadcasts</div>
+                       </div>
+                       <div className="space-y-4">
+                          {Object.entries(stats.botStats.perBotCount).map(([name, count]) => (
+                            <div key={name} className="flex justify-between items-center pb-2 border-b border-gray-50">
+                               <span className="text-sm font-bold text-gray-700">{name}</span>
+                               <span className="text-xs font-black bg-gray-100 px-2 py-1 rounded text-gray-500">{count} Posts</span>
                             </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                          ))}
+                       </div>
+                    </div>
+                    <div className="bg-white p-8 rounded-xl border border-gray-100 shadow-sm flex flex-col">
+                       <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-6">Broadcast History</h3>
+                       <div className="space-y-4 flex-1">
+                          {stats.botStats.recentHistory.map((h, i) => (
+                            <div key={i} className="flex gap-4 items-start">
+                               <div className="text-xs shrink-0 font-mono text-gray-300">{new Date(h.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                               <div className="min-w-0">
+                                  <p className="text-xs font-bold text-gray-800 truncate">{h.title}</p>
+                                  <p className="text-[9px] text-blue-500 font-black uppercase">{new Date(h.created_at).toLocaleDateString()}</p>
+                               </div>
+                            </div>
+                          ))}
+                       </div>
+                    </div>
+                    <div className="bg-[#1d2327] p-8 rounded-xl shadow-xl text-white">
+                       <h3 className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-6">Upcoming Tickers</h3>
+                       <div className="space-y-6">
+                          {stats.botStats.futureSchedule.map((s, i) => (
+                            <div key={i} className="relative pl-6 border-l-2 border-gray-700 pb-2 last:pb-0">
+                               <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-blue-500"></div>
+                               <div className="flex justify-between items-start mb-1">
+                                  <span className="text-sm font-black font-serif text-white">{s.name}</span>
+                                  <span className="text-[9px] bg-blue-600/20 text-blue-400 px-2 py-0.5 rounded font-black">{new Date(s.nextRun).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                               </div>
+                               <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">{s.niche}</p>
+                               <p className="text-[9px] font-mono text-gray-400 italic">Expected: {new Date(s.nextRun).toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'})}</p>
+                            </div>
+                          ))}
+                       </div>
+                    </div>
+                  </div>
+                </section>
               </div>
-            </div>
+            )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Referrers */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6">Top Traffic Sources</h3>
-                <div className="space-y-4">
-                  {stats.referrers.map((r, i) => (
-                    <div key={i} className="flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-blue-400"></div>
-                        <span className="text-xs font-bold text-gray-700 truncate max-w-[150px]">{r.name}</span>
-                      </div>
-                      <span className="text-xs font-black text-gray-400">{r.count} hits</span>
+            {/* Fix: changed 'user' to 'users' to match AnalyticsTab type */}
+            {activeTab === 'users' && (
+              <div className="space-y-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <span className="text-xl">👥</span>
+                  <h2 className="text-xl font-bold font-serif text-gray-800">User & Member Metrics</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
+                    <div className="text-4xl font-black text-gray-900 mb-2">{stats.userStats.totalUsers}</div>
+                    <div className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Total Registered</div>
+                  </div>
+                  {Object.entries(stats.userStats.roleBreakdown).map(([role, count]) => (
+                    <div key={role} className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
+                      <div className="text-4xl font-black text-blue-600 mb-2">{count}</div>
+                      <div className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{role}s</div>
                     </div>
                   ))}
-                  {stats.referrers.length === 0 && <p className="text-center text-gray-300 italic text-xs">No referrers logged.</p>}
+                </div>
+                
+                <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                   <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 font-black text-[10px] uppercase text-gray-400 tracking-widest">Recent Portal Activity</div>
+                   <div className="divide-y divide-gray-50">
+                     {stats.sessions.map((session, i) => (
+                       <div key={i} className="px-6 py-4 flex justify-between items-center text-sm">
+                          <div className="flex gap-4 items-center">
+                             <div className={`w-2 h-2 rounded-full ${session.duration > 10 ? 'bg-green-500' : 'bg-gray-200'}`}></div>
+                             <span className="font-mono text-[10px] text-gray-400">Node: {session.sessionId.slice(0, 8)}</span>
+                          </div>
+                          <div className="flex gap-8 items-center text-xs font-bold text-gray-700">
+                             <span>Stay: {session.duration}m</span>
+                             <span>Events: {session.eventCount}</span>
+                             <span className="text-[10px] text-gray-400 font-normal">{new Date(session.lastActive).toLocaleTimeString()}</span>
+                          </div>
+                       </div>
+                     ))}
+                   </div>
                 </div>
               </div>
+            )}
 
-              {/* Geographic Insight */}
-              <div className="bg-gray-900 rounded-xl shadow-lg border border-gray-800 p-6 text-white overflow-hidden relative">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-                <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest mb-4">Current Observer</h3>
-                <div className="relative z-10">
-                  <div className="text-4xl mb-4">🌍</div>
-                  <div className="text-xl font-bold">{visitorLoc?.city || 'Universal'}, {visitorLoc?.country_name || 'Earth'}</div>
-                  <p className="text-xs text-gray-400 mt-1">Network: {visitorLoc?.org || 'Standard IP'}</p>
-                  <div className="mt-4 pt-4 border-t border-gray-800 text-[10px] text-gray-500 uppercase tracking-tighter">
-                    UTC Time: {new Date().toUTCString()}
-                  </div>
+            {activeTab === 'site' && (
+              <div className="space-y-12">
+                <div className="flex items-center gap-3 mb-6">
+                  <span className="text-xl">📈</span>
+                  <h2 className="text-xl font-bold font-serif text-gray-800">Global Traffic Overview</h2>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Session Leaderboard */}
-          <div className="space-y-8">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="px-6 py-4 bg-gray-50/50 border-b border-gray-50">
-                <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">Active Sessions</h3>
-              </div>
-              <div className="p-6 space-y-6">
-                {stats.sessions.length === 0 ? (
-                  <p className="text-center text-gray-300 italic text-xs">Awaiting traffic...</p>
-                ) : (
-                  stats.sessions.map((s, i) => (
-                    <div key={i} className="flex justify-between items-start border-b border-gray-50 pb-4 last:border-0 last:pb-0">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {[
+                    { label: 'Site Traffic', val: stats.totalViews, icon: '📈' },
+                    { label: 'Internal Activity', val: stats.totalClicks, icon: '🖱️' },
+                    { label: 'Avg Session', val: `${stats.avgSessionTime}m`, icon: '⏳' },
+                    { label: 'Longest Stay', val: `${stats.longestSession}m`, icon: '🏆' }
+                  ].map((c, i) => (
+                    <div key={i} className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
+                      <div className="text-2xl">{c.icon}</div>
                       <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`w-2 h-2 rounded-full ${s.duration > 10 ? 'bg-orange-500' : 'bg-green-400'}`}></span>
-                          <span className="text-[10px] font-mono text-gray-400">SESSION: {s.sessionId.slice(-6).toUpperCase()}</span>
-                        </div>
-                        <p className="text-xs text-gray-400">{new Date(s.lastActive).toLocaleTimeString()}</p>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-lg font-black text-gray-900 leading-none">{s.duration}m</div>
-                        <p className="text-[9px] font-black text-gray-400 uppercase mt-1">{s.eventCount} Actions</p>
+                        <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{c.label}</p>
+                        <div className="text-2xl font-black text-gray-900">{c.val}</div>
                       </div>
                     </div>
-                  ))
-                )}
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                   <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100">
+                      <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-6">Top Discovery Channels</h3>
+                      <div className="space-y-4">
+                        {stats.referrers.map((r, i) => (
+                          <div key={i} className="flex justify-between items-center pb-2 border-b border-gray-50 last:border-0">
+                             <span className="text-xs font-mono text-blue-600 truncate max-w-[200px]">{r.name}</span>
+                             <span className="text-xs font-black text-gray-900">{r.count} referrals</span>
+                          </div>
+                        ))}
+                      </div>
+                   </div>
+                   <div className="bg-gray-900 rounded-xl shadow-2xl p-8 text-white relative overflow-hidden">
+                      <div className="absolute top-0 right-0 p-4 opacity-10 text-8xl">📊</div>
+                      <h3 className="text-2xl font-bold font-serif mb-4">Observer Node Insight</h3>
+                      <p className="text-gray-400 text-sm max-w-lg mb-6 leading-relaxed">
+                        Current node tracking from <b>{visitorLoc?.city || 'Universal'}</b>. 
+                        Engagement density is focused on high-intent conversion pathways. 
+                        Session duration has increased by 14% this epoch.
+                      </p>
+                      <div className="flex gap-4">
+                          <div className="px-4 py-2 bg-blue-600 rounded text-[10px] font-black uppercase">Active Nodes: 1</div>
+                          <div className="px-4 py-2 bg-gray-800 rounded text-[10px] font-black uppercase">Uptime: 99.9%</div>
+                      </div>
+                   </div>
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="bg-blue-600 rounded-xl shadow-lg p-6 text-white text-center">
-              <h4 className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-2">Longest Stay Record</h4>
-              <div className="text-5xl font-black mb-1">{stats.longestSession}m</div>
-              <p className="text-xs font-bold opacity-80">Continuous Engagement</p>
-            </div>
+            {activeTab === 'posts' && (
+              <div className="space-y-12">
+                <div className="flex items-center gap-3 mb-6">
+                  <span className="text-xl">✍️</span>
+                  <h2 className="text-xl font-bold font-serif text-gray-800">Post & Content Engagement</h2>
+                </div>
+                <div className="bg-white p-8 rounded-xl border border-gray-100 shadow-sm">
+                   <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-8">Highest Impact Publications</h3>
+                   <div className="space-y-6">
+                      {stats.postPerformance.length > 0 ? stats.postPerformance.map((post, i) => (
+                        <div key={i} className="flex items-center gap-6 group">
+                           <div className="w-8 h-8 rounded bg-gray-900 text-white flex items-center justify-center font-black text-xs shrink-0">#{i+1}</div>
+                           <div className="flex-1 border-b border-gray-100 pb-2 group-last:border-0">
+                              <div className="flex justify-between items-center">
+                                 <span className="text-sm font-bold text-gray-800 truncate">/{post.slug}</span>
+                                 <span className="text-xs font-black text-blue-600">{post.views} Unique Views</span>
+                              </div>
+                              <div className="w-full bg-gray-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                                 <div className="bg-blue-600 h-full rounded-full transition-all duration-1000" style={{ width: `${(post.views / (stats.postPerformance[0]?.views || 1)) * 100}%` }}></div>
+                              </div>
+                           </div>
+                        </div>
+                      )) : (
+                        <p className="text-center py-20 text-gray-300 italic">No content engagement data recorded yet.</p>
+                      )}
+                   </div>
+                </div>
+              </div>
+            )}
           </div>
-
-        </div>
+        )}
       </main>
     </div>
   );

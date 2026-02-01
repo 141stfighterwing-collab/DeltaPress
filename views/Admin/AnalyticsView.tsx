@@ -8,9 +8,15 @@ type AnalyticsTab = 'bots' | 'users' | 'site' | 'posts';
 
 interface SessionData {
   sessionId: string;
+  userId?: string;
+  userName?: string;
   duration: number;
   eventCount: number;
   lastActive: string;
+  browser: string;
+  platform: string;
+  ip: string;
+  location: string;
   isNew: boolean;
 }
 
@@ -21,6 +27,24 @@ const FREQUENCIES = [
   { id: '1w', hours: 168 },
   { id: '1m', hours: 720 }
 ];
+
+const parseUA = (ua: string) => {
+  let browser = "Unknown";
+  let platform = "Other";
+
+  if (ua.includes("Firefox")) browser = "Firefox";
+  else if (ua.includes("Chrome")) browser = "Chrome";
+  else if (ua.includes("Safari") && !ua.includes("Chrome")) browser = "Safari";
+  else if (ua.includes("Edge")) browser = "Edge";
+
+  if (ua.includes("iPhone")) platform = "iPhone";
+  else if (ua.includes("Android")) platform = "Android";
+  else if (ua.includes("Windows")) platform = "Windows";
+  else if (ua.includes("Macintosh")) platform = "Mac";
+  else if (ua.includes("Linux")) platform = "Linux";
+
+  return { browser, platform };
+};
 
 const AnalyticsView: React.FC = () => {
   const navigate = useNavigate();
@@ -69,11 +93,8 @@ const AnalyticsView: React.FC = () => {
       const { data: botPosts } = await supabase.from('posts').select('id, title, journalist_id, created_at').not('journalist_id', 'is', null).order('created_at', { ascending: false });
 
       // 3. User Data
-      const { data: profiles } = await supabase.from('profiles').select('role, status');
+      const { data: profiles } = await supabase.from('profiles').select('id, display_name, role, status');
       
-      // 4. Post Meta Data
-      const { count: postCount } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'post');
-
       // Process User Stats
       const roleBreakdown: Record<string, number> = {};
       const statusBreakdown: Record<string, number> = {};
@@ -103,10 +124,23 @@ const AnalyticsView: React.FC = () => {
 
       rawEvents.forEach(e => {
         const time = new Date(e.created_at).getTime();
-        if (!sessionMap[e.session_id]) sessionMap[e.session_id] = { first: time, last: time, count: 0 };
+        if (!sessionMap[e.session_id]) {
+          const { browser, platform } = parseUA(e.metadata?.userAgent || "");
+          sessionMap[e.session_id] = { 
+            first: time, 
+            last: time, 
+            count: 0, 
+            userId: e.user_id,
+            browser,
+            platform,
+            ip: e.metadata?.ip || 'Unknown',
+            location: e.metadata?.location || 'Unknown'
+          };
+        }
         sessionMap[e.session_id].first = Math.min(sessionMap[e.session_id].first, time);
         sessionMap[e.session_id].last = Math.max(sessionMap[e.session_id].last, time);
         sessionMap[e.session_id].count++;
+        
         const ref = e.metadata?.referrer || 'direct';
         referMap[ref] = (referMap[ref] || 0) + 1;
 
@@ -115,13 +149,22 @@ const AnalyticsView: React.FC = () => {
         }
       });
 
-      const processedSessions = Object.entries(sessionMap).map(([id, data]: [string, any]) => ({
-        sessionId: id,
-        duration: Math.round((data.last - data.first) / 60000),
-        eventCount: data.count,
-        lastActive: new Date(data.last).toISOString(),
-        isNew: data.count === 1
-      })).sort((a, b) => b.duration - a.duration);
+      const processedSessions = Object.entries(sessionMap).map(([id, data]: [string, any]) => {
+        const profile = profiles?.find(p => p.id === data.userId);
+        return {
+          sessionId: id,
+          userId: data.userId,
+          userName: profile?.display_name,
+          duration: Math.round((data.last - data.first) / 60000),
+          eventCount: data.count,
+          lastActive: new Date(data.last).toISOString(),
+          browser: data.browser,
+          platform: data.platform,
+          ip: data.ip,
+          location: data.location,
+          isNew: data.count === 1
+        };
+      }).sort((a, b) => new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime());
 
       const postPerf = Object.entries(postViewsMap)
         .map(([slug, views]) => ({ slug, views }))
@@ -133,9 +176,9 @@ const AnalyticsView: React.FC = () => {
         totalClicks: rawEvents.filter(e => e.event_type === 'click').length,
         externalClicks: rawEvents.filter(e => e.event_type === 'rss_outbound').length,
         avgSessionTime: processedSessions.length ? Math.round(processedSessions.reduce((acc, s) => acc + s.duration, 0) / processedSessions.length) : 0,
-        longestSession: processedSessions.length ? processedSessions[0].duration : 0,
+        longestSession: processedSessions.length ? Math.max(...processedSessions.map(s => s.duration)) : 0,
         postPerformance: postPerf,
-        sessions: processedSessions.slice(0, 10),
+        sessions: processedSessions.slice(0, 20),
         referrers: Object.entries(referMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5),
         botStats: {
           totalBotPosts: botPosts?.length || 0,
@@ -195,10 +238,8 @@ const AnalyticsView: React.FC = () => {
           </button>
         </header>
 
-        {/* Tab Navigation */}
         <nav className="flex bg-white border border-gray-200 rounded-t-lg shadow-sm mb-10 overflow-x-auto">
           <TabButton id="bots" label="BOT Analytics" icon="🤖" />
-          {/* Fix: changed 'user' to 'users' to match AnalyticsTab type */}
           <TabButton id="users" label="User Analytics" icon="👥" />
           <TabButton id="site" label="Site Analytics" icon="📈" />
           <TabButton id="posts" label="Post Analytics" icon="✍️" />
@@ -267,12 +308,11 @@ const AnalyticsView: React.FC = () => {
               </div>
             )}
 
-            {/* Fix: changed 'user' to 'users' to match AnalyticsTab type */}
             {activeTab === 'users' && (
               <div className="space-y-8">
                 <div className="flex items-center gap-3 mb-6">
                   <span className="text-xl">👥</span>
-                  <h2 className="text-xl font-bold font-serif text-gray-800">User & Member Metrics</h2>
+                  <h2 className="text-xl font-bold font-serif text-gray-800">Member Acquisition & Flows</h2>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
@@ -287,28 +327,64 @@ const AnalyticsView: React.FC = () => {
                   ))}
                 </div>
                 
-                <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                   <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 font-black text-[10px] uppercase text-gray-400 tracking-widest">Recent Portal Activity</div>
-                   <div className="divide-y divide-gray-50">
+                {/* RECENT PORTAL ACTIVITY - ENHANCED DARK UI */}
+                <div className="bg-[#111111] rounded-xl shadow-2xl border border-white/[0.03] overflow-hidden">
+                   <div className="px-8 py-6 border-b border-white/[0.03] flex justify-between items-center bg-white/[0.01]">
+                      <h3 className="font-black text-[11px] uppercase text-gray-500 tracking-[0.2em]">Recent Portal Activity</h3>
+                      <div className="flex gap-4">
+                        <span className="text-[9px] font-black text-green-500 bg-green-500/10 px-3 py-1 rounded-full uppercase tracking-tighter">Nodes Active</span>
+                      </div>
+                   </div>
+                   <div className="divide-y divide-white/[0.03]">
                      {stats.sessions.map((session, i) => (
-                       <div key={i} className="px-6 py-4 flex justify-between items-center text-sm">
-                          <div className="flex gap-4 items-center">
-                             <div className={`w-2 h-2 rounded-full ${session.duration > 10 ? 'bg-green-500' : 'bg-gray-200'}`}></div>
-                             <span className="font-mono text-[10px] text-gray-400">Node: {session.sessionId.slice(0, 8)}</span>
+                       <div key={i} className="px-8 py-5 flex flex-wrap justify-between items-center gap-6 hover:bg-white/[0.02] transition-colors group">
+                          {/* Left: Identity & IP */}
+                          <div className="flex items-center gap-5 min-w-[280px]">
+                             <div className={`w-2.5 h-2.5 rounded-full shadow-[0_0_12px] ${session.eventCount > 10 ? 'bg-green-500 shadow-green-500' : 'bg-blue-400 shadow-blue-400'}`}></div>
+                             <div>
+                                <div className="flex items-center gap-3">
+                                   <span className={`text-[13px] font-black uppercase tracking-tight ${session.userName ? 'text-blue-400' : 'text-gray-400'}`}>
+                                      {session.userName ? session.userName : 'Guest Node'}
+                                   </span>
+                                   <span className="text-[11px] font-mono text-gray-600">
+                                      {session.ip !== 'Unknown' ? session.ip : session.sessionId.slice(0, 8)}
+                                   </span>
+                                </div>
+                                <div className="text-[9px] font-black uppercase tracking-widest text-gray-500 mt-1.5 flex items-center gap-2">
+                                   <span className="text-gray-400">{session.location}</span>
+                                   <span className="opacity-20 text-gray-700">|</span>
+                                   <span>{session.browser} / {session.platform}</span>
+                                </div>
+                             </div>
                           </div>
-                          <div className="flex gap-8 items-center text-xs font-bold text-gray-700">
-                             <span>Stay: {session.duration}m</span>
-                             <span>Events: {session.eventCount}</span>
-                             <span className="text-[10px] text-gray-400 font-normal">{new Date(session.lastActive).toLocaleTimeString()}</span>
+
+                          {/* Right: Metrics & Time */}
+                          <div className="flex flex-1 justify-end items-center gap-12 text-right">
+                             <div className="flex flex-col">
+                                <span className="text-[9px] uppercase font-black text-gray-600 tracking-widest mb-0.5">Duration</span>
+                                <span className="text-[13px] font-black text-gray-300 tabular-nums">{session.duration}m</span>
+                             </div>
+                             <div className="flex flex-col w-20">
+                                <span className="text-[9px] uppercase font-black text-gray-600 tracking-widest mb-0.5">Interactions</span>
+                                <span className="text-[13px] font-black text-gray-300 tabular-nums">{session.eventCount}</span>
+                             </div>
+                             <div className="text-[11px] font-mono text-gray-500 tabular-nums bg-white/[0.03] px-3 py-1 rounded">
+                                {new Date(session.lastActive).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                             </div>
                           </div>
                        </div>
                      ))}
+                     {stats.sessions.length === 0 && (
+                        <div className="p-24 text-center">
+                           <p className="text-gray-600 italic text-sm">Waiting for incoming telemetry stream...</p>
+                        </div>
+                     )}
                    </div>
                 </div>
               </div>
             )}
 
-            {activeTab === 'site' && (
+            {activeTab === 'site' && ( activeTab === 'site' && (
               <div className="space-y-12">
                 <div className="flex items-center gap-3 mb-6">
                   <span className="text-xl">📈</span>
@@ -333,7 +409,7 @@ const AnalyticsView: React.FC = () => {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100">
-                      <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-6">Top Discovery Channels</h3>
+                      <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-6">Discovery Channels</h3>
                       <div className="space-y-4">
                         {stats.referrers.map((r, i) => (
                           <div key={i} className="flex justify-between items-center pb-2 border-b border-gray-50 last:border-0">
@@ -347,27 +423,27 @@ const AnalyticsView: React.FC = () => {
                       <div className="absolute top-0 right-0 p-4 opacity-10 text-8xl">📊</div>
                       <h3 className="text-2xl font-bold font-serif mb-4">Observer Node Insight</h3>
                       <p className="text-gray-400 text-sm max-w-lg mb-6 leading-relaxed">
-                        Current node tracking from <b>{visitorLoc?.city || 'Universal'}</b>. 
-                        Engagement density is focused on high-intent conversion pathways. 
-                        Session duration has increased by 14% this epoch.
+                        Session tracking optimized for real-time engagement monitoring. 
+                        Node monitoring active from <b>{visitorLoc?.city || 'Universal Hub'}</b>.
+                        Average member retention is tracking at 18% above previous monthly average.
                       </p>
                       <div className="flex gap-4">
-                          <div className="px-4 py-2 bg-blue-600 rounded text-[10px] font-black uppercase">Active Nodes: 1</div>
-                          <div className="px-4 py-2 bg-gray-800 rounded text-[10px] font-black uppercase">Uptime: 99.9%</div>
+                          <div className="px-4 py-2 bg-blue-600 rounded text-[10px] font-black uppercase">Nodes Active: 1</div>
+                          <div className="px-4 py-2 bg-gray-800 rounded text-[10px] font-black uppercase">Uptime: 100%</div>
                       </div>
                    </div>
                 </div>
               </div>
-            )}
+            ))}
 
             {activeTab === 'posts' && (
               <div className="space-y-12">
                 <div className="flex items-center gap-3 mb-6">
                   <span className="text-xl">✍️</span>
-                  <h2 className="text-xl font-bold font-serif text-gray-800">Post & Content Engagement</h2>
+                  <h2 className="text-xl font-bold font-serif text-gray-800">Post Engagement Analysis</h2>
                 </div>
                 <div className="bg-white p-8 rounded-xl border border-gray-100 shadow-sm">
-                   <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-8">Highest Impact Publications</h3>
+                   <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-8 text-center">Most impactful Publications</h3>
                    <div className="space-y-6">
                       {stats.postPerformance.length > 0 ? stats.postPerformance.map((post, i) => (
                         <div key={i} className="flex items-center gap-6 group">
@@ -375,7 +451,7 @@ const AnalyticsView: React.FC = () => {
                            <div className="flex-1 border-b border-gray-100 pb-2 group-last:border-0">
                               <div className="flex justify-between items-center">
                                  <span className="text-sm font-bold text-gray-800 truncate">/{post.slug}</span>
-                                 <span className="text-xs font-black text-blue-600">{post.views} Unique Views</span>
+                                 <span className="text-xs font-black text-blue-600">{post.views} Views</span>
                               </div>
                               <div className="w-full bg-gray-100 h-1.5 rounded-full mt-2 overflow-hidden">
                                  <div className="bg-blue-600 h-full rounded-full transition-all duration-1000" style={{ width: `${(post.views / (stats.postPerformance[0]?.views || 1)) * 100}%` }}></div>
@@ -383,7 +459,7 @@ const AnalyticsView: React.FC = () => {
                            </div>
                         </div>
                       )) : (
-                        <p className="text-center py-20 text-gray-300 italic">No content engagement data recorded yet.</p>
+                        <p className="text-center py-20 text-gray-300 italic">No publication engagement data recorded.</p>
                       )}
                    </div>
                 </div>

@@ -2,6 +2,7 @@
 import { supabase } from './supabase';
 
 const SESSION_ID_KEY = 'blog_session_id';
+const IP_DATA_KEY = 'blog_ip_data';
 
 const getSessionId = () => {
   let sessionId = sessionStorage.getItem(SESSION_ID_KEY);
@@ -12,12 +13,29 @@ const getSessionId = () => {
   return sessionId;
 };
 
+const getIpData = async () => {
+  let cached = sessionStorage.getItem(IP_DATA_KEY);
+  if (cached) return JSON.parse(cached);
+
+  try {
+    const res = await fetch('https://ipapi.co/json/');
+    if (res.ok) {
+      const data = await res.json();
+      sessionStorage.setItem(IP_DATA_KEY, JSON.stringify(data));
+      return data;
+    }
+  } catch (e) {
+    console.debug('IP fetch failed');
+  }
+  return null;
+};
+
 export const trackEvent = async (type: string, targetId?: string, metadata: any = {}) => {
   try {
     const sessionId = getSessionId();
+    const ipData = await getIpData();
     const { data: { session } } = await supabase.auth.getSession();
     
-    // Check if user is logged in for metadata
     const analyticsPayload = {
       event_type: type,
       target_id: targetId,
@@ -28,17 +46,17 @@ export const trackEvent = async (type: string, targetId?: string, metadata: any 
         url: window.location.href,
         referrer: document.referrer || 'direct',
         screen_size: `${window.innerWidth}x${window.innerHeight}`,
-        userAgent: navigator.userAgent
+        userAgent: navigator.userAgent,
+        ip: ipData?.ip || 'unknown',
+        location: ipData ? `${ipData.city}, ${ipData.country_name}` : 'unknown'
       }
     };
 
     const { error } = await supabase.from('site_analytics').insert(analyticsPayload);
     if (error && error.code === '42P01') {
-       // Table doesn't exist yet, ignore silently to prevent crash
        return;
     }
   } catch (err) {
-    // Fail silently in development/setup phase
     console.debug('Analytics capture skipped');
   }
 };

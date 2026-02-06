@@ -7,6 +7,7 @@ import SinglePost from './views/SinglePost';
 import Newsroom from './views/Newsroom';
 import NewsDetail from './views/NewsDetail';
 import ContactView from './views/ContactView';
+import MeetTeam from './views/MeetTeam';
 import Login from './views/Auth/Login';
 import Register from './views/Auth/Register';
 import AdminDashboard from './views/Admin/AdminDashboard';
@@ -36,6 +37,7 @@ const App: React.FC = () => {
         <Route path="/news" element={<Newsroom />} />
         <Route path="/news/:url" element={<NewsDetail />} />
         <Route path="/contact" element={<ContactView />} />
+        <Route path="/meet-our-team" element={<MeetTeam />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         

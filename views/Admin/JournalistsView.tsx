@@ -8,6 +8,7 @@ import AdminSidebar from '../../components/AdminSidebar';
 interface Bot {
   id: string;
   name: string;
+  title: string;
   niche: string;
   category: string;
   schedule: string;
@@ -15,10 +16,14 @@ interface Bot {
   last_run: string | null;
   perspective: number; 
   gender: 'male' | 'female';
+  ethnicity: string;
+  hair_color: string;
   avatar_url?: string;
 }
 
 const CATEGORIES = ['Politics', 'Economics', 'Technology', 'Health', 'Business', 'Lifestyle', 'Travel', 'Food', 'General'];
+const ETHNICITIES = ['Arab', 'Asian', 'Latino', 'White', 'Black', 'Ginger'];
+const HAIR_COLORS = ['Blonde', 'Red', 'Black', 'Brunette', 'Blue/Black', 'Bleached', 'Grey'];
 
 const FREQUENCIES = [
   { id: '6h', label: 'Every 6 Hours', hours: 6 },
@@ -57,11 +62,14 @@ const JournalistsView: React.FC = () => {
   
   const [formData, setFormData] = useState({
     name: '',
+    title: '',
     niche: '',
     category: 'Politics',
     schedule: '24h',
     perspective: 0,
     gender: 'female' as 'male' | 'female',
+    ethnicity: 'White',
+    hair_color: 'Brunette',
     avatar_url: ''
   });
 
@@ -105,7 +113,7 @@ const JournalistsView: React.FC = () => {
     setIsGeneratingAvatar(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-      const prompt = `A professional, realistic high-resolution studio headshot of a [${formData.gender}] news journalist, specialized in [${formData.category}]. High fashion cinematic lighting.`;
+      const prompt = `A professional, realistic studio headshot of a ${formData.ethnicity} ${formData.gender} news journalist with ${formData.hair_color} hair. High fashion cinematic lighting. Specializing in ${formData.category}.`;
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: { parts: [{ text: prompt }] },
@@ -123,16 +131,22 @@ const JournalistsView: React.FC = () => {
       setEditingBot(bot);
       setFormData({
         name: bot.name, 
+        title: bot.title || '',
         niche: bot.niche, 
         category: bot.category,
         schedule: bot.schedule, 
         perspective: bot.perspective, 
         gender: bot.gender,
+        ethnicity: bot.ethnicity || 'White',
+        hair_color: bot.hair_color || 'Brunette',
         avatar_url: bot.avatar_url || ''
       });
     } else {
       setEditingBot(null);
-      setFormData({ name: '', niche: '', category: 'Politics', schedule: '24h', perspective: 0, gender: 'female', avatar_url: '' });
+      setFormData({ 
+        name: '', title: '', niche: '', category: 'Politics', schedule: '24h', 
+        perspective: 0, gender: 'female', ethnicity: 'White', hair_color: 'Brunette', avatar_url: '' 
+      });
     }
     setShowConfigModal(true);
   };
@@ -143,11 +157,14 @@ const JournalistsView: React.FC = () => {
     try {
       const payload: any = {
         name: formData.name, 
+        title: formData.title,
         niche: formData.niche,
         category: formData.category, 
         schedule: formData.schedule,
         perspective: formData.perspective, 
         gender: formData.gender, 
+        ethnicity: formData.ethnicity,
+        hair_color: formData.hair_color,
         avatar_url: formData.avatar_url,
         status: editingBot?.status || 'active'
       };
@@ -160,47 +177,26 @@ const JournalistsView: React.FC = () => {
 
   const handleRunBot = async (bot: Bot) => {
     setIsDeploying(bot.id);
-    setDeploymentStep('Drafting Article...');
+    setDeploymentStep('Drafting...');
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const textResponse = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Write a 500-word ${bot.category} article about ${bot.niche}. Tone: ${SPECTRUM_LABELS[bot.perspective]}. Format with HTML. Start with <h1>TITLE</h1>.`,
+        contents: `Write a 500-word ${bot.category} article about ${bot.niche}. Tone: ${SPECTRUM_LABELS[bot.perspective]}. HTML format.`,
         config: { tools: [{ googleSearch: {} }] }
       });
-
       const fullText = textResponse.text || '';
       const title = fullText.match(/<h1>(.*?)<\/h1>/)?.[1] || `${bot.niche} Update`;
       const content = fullText.replace(/<h1>.*?<\/h1>/, '').trim();
 
-      setDeploymentStep('Generating Visuals...');
-      let featured_image = '';
-      try {
-        const imageAi = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-        const imgResp = await imageAi.models.generateContent({
-          model: 'gemini-2.5-flash-image',
-          contents: { parts: [{ text: `A news photo for: ${title}` }] }
-        });
-        const imgPart = imgResp.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (imgPart?.inlineData) featured_image = `data:image/png;base64,${imgPart.inlineData.data}`;
-      } catch (e) {}
-
-      setDeploymentStep('Broadcasting...');
       const { data: { session } } = await supabase.auth.getSession();
       await supabase.from('posts').insert({
-        title, 
-        content, 
-        status: 'publish', 
-        author_id: session?.user?.id,
-        journalist_id: bot.id, 
-        featured_image,
-        type: 'post',
+        title, content, status: 'publish', author_id: session?.user?.id, journalist_id: bot.id, type: 'post',
         slug: title.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-') + '-' + Date.now().toString().slice(-4)
       });
-
       await supabase.from('journalists').update({ last_run: new Date().toISOString() }).eq('id', bot.id);
       fetchBots();
-    } catch (err: any) { alert(err.message); } finally { setIsDeploying(null); }
+    } catch (err) {} finally { setIsDeploying(null); }
   };
 
   return (
@@ -209,31 +205,34 @@ const JournalistsView: React.FC = () => {
       <main className="flex-1 p-6 lg:p-10 max-w-7xl mx-auto">
         <header className="flex justify-between items-center mb-12">
           <div>
-            <h1 className="text-4xl font-black text-gray-900 font-serif leading-tight">Newsroom AI</h1>
-            <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-2">Autonomous Editorial Agents</p>
+            <h1 className="text-4xl font-black text-gray-900 font-serif">Newsroom AI</h1>
+            <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-2">Autonomous Staff Registry</p>
           </div>
-          <button onClick={() => handleOpenModal()} className="bg-[#0073aa] text-white px-8 py-3 rounded-sm text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-blue-700 transition-all">New Agent</button>
+          <button onClick={() => handleOpenModal()} className="bg-[#0073aa] text-white px-8 py-3 rounded text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-blue-700">New Agent</button>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {bots.map(bot => (
             <div key={bot.id} className="bg-white border rounded shadow-sm flex flex-col group overflow-hidden">
                <div className="p-8 pb-4 flex items-center gap-5">
-                  <img src={bot.avatar_url || (bot.gender === 'male' ? DEFAULT_AVATAR_URLS.male : DEFAULT_AVATAR_URLS.female)} className="w-16 h-16 rounded-full object-cover border bg-gray-50" />
+                  <img src={bot.avatar_url || (bot.gender === 'male' ? DEFAULT_AVATAR_URLS.male : DEFAULT_AVATAR_URLS.female)} className="w-16 h-16 rounded-full object-cover border" />
                   <div>
-                    <h3 className="text-2xl font-black text-gray-900 font-serif">{bot.name}</h3>
-                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{bot.category}</p>
+                    <h3 className="text-2xl font-black text-gray-900 font-serif leading-none">{bot.name}</h3>
+                    <p className="text-[9px] text-blue-500 font-black uppercase tracking-widest mt-1">{bot.title || bot.category}</p>
                   </div>
                </div>
-               <div className="p-8 flex-1 space-y-4">
-                  <p className="text-sm font-bold text-gray-800 bg-gray-50 p-4 rounded border">Beat: {bot.niche}</p>
+               <div className="p-8 pt-0 flex-1 space-y-4">
+                  <div className="bg-gray-50 p-4 rounded border">
+                    <p className="text-[10px] font-black uppercase text-gray-400">Beat Coverage</p>
+                    <p className="text-sm font-bold text-gray-800">{bot.niche}</p>
+                  </div>
                   <div className="bg-[#1d2327] text-white p-5 rounded border-l-4 border-blue-500">
                       <div className="text-[10px] font-black uppercase text-blue-400 mb-1">Status</div>
                       <div className="text-3xl font-mono font-black">{isDeploying === bot.id ? 'BUSY' : calculateCountdown(calculateNextRun(bot))}</div>
                   </div>
                </div>
                <div className="p-8 pt-0 flex gap-2">
-                  <button onClick={() => handleRunBot(bot)} disabled={!!isDeploying} className="flex-1 bg-gray-900 text-white py-4 rounded text-[10px] font-black uppercase hover:bg-black disabled:opacity-50">{isDeploying === bot.id ? deploymentStep : 'Deploy'}</button>
+                  <button onClick={() => handleRunBot(bot)} disabled={!!isDeploying} className="flex-1 bg-gray-900 text-white py-4 rounded text-[10px] font-black uppercase hover:bg-black disabled:opacity-50">{isDeploying === bot.id ? 'Working...' : 'Manual Deploy'}</button>
                   <button onClick={() => handleOpenModal(bot)} className="px-6 bg-gray-100 rounded text-[10px] font-black uppercase border hover:bg-gray-200">Edit</button>
                </div>
             </div>
@@ -242,25 +241,41 @@ const JournalistsView: React.FC = () => {
 
         {showConfigModal && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[100] backdrop-blur-sm">
-            <div className="bg-white p-10 rounded shadow-2xl max-w-2xl w-full border-t-8 border-gray-900">
-              <h2 className="text-2xl font-black mb-8 font-serif uppercase">Calibrate Intelligence</h2>
+            <div className="bg-white p-10 rounded shadow-2xl max-w-2xl w-full border-t-8 border-gray-900 max-h-[90vh] overflow-y-auto">
+              <h2 className="text-2xl font-black mb-8 font-serif uppercase tracking-tighter">Calibrate Intelligence</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 <div className="space-y-6">
-                  <input type="text" placeholder="Agent Name" className="w-full border-2 p-3 font-bold text-sm bg-gray-50" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
-                  <input type="text" placeholder="Topic Beat" className="w-full border-2 p-3 font-bold text-sm bg-gray-50" value={formData.niche} onChange={e => setFormData({ ...formData, niche: e.target.value })} />
-                  <select className="w-full border-2 p-3 font-bold text-sm bg-gray-50" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>{CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select>
-                  <input type="range" min="-3" max="3" step="1" className="w-full accent-gray-900" value={formData.perspective} onChange={e => setFormData({ ...formData, perspective: parseInt(e.target.value) })} />
-                  <div className="text-[10px] font-black text-center text-gray-400 uppercase">{SPECTRUM_LABELS[formData.perspective]}</div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400">Name</label>
+                    <input type="text" className="w-full border-2 p-3 font-bold text-sm bg-gray-50 focus:border-blue-500 outline-none" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400">Professional Title</label>
+                    <input type="text" placeholder="e.g. Senior Food Consultant" className="w-full border-2 p-3 font-bold text-sm bg-gray-50 focus:border-blue-500 outline-none" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400">Beat / Topic</label>
+                    <input type="text" className="w-full border-2 p-3 font-bold text-sm bg-gray-50 focus:border-blue-500 outline-none" value={formData.niche} onChange={e => setFormData({ ...formData, niche: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <select className="w-full border-2 p-3 font-bold text-sm bg-gray-50" value={formData.gender} onChange={e => setFormData({ ...formData, gender: e.target.value as any })}><option value="female">Female</option><option value="male">Male</option></select>
+                    <select className="w-full border-2 p-3 font-bold text-sm bg-gray-50" value={formData.ethnicity} onChange={e => setFormData({ ...formData, ethnicity: e.target.value })}>{ETHNICITIES.map(et => <option key={et} value={et}>{et}</option>)}</select>
+                  </div>
                 </div>
-                <div className="bg-gray-50 p-6 rounded border flex flex-col items-center gap-4">
-                    <div className="w-32 h-32 rounded-full border-4 border-white shadow-xl overflow-hidden bg-gray-200">
+                <div className="bg-gray-50 p-6 rounded border flex flex-col items-center gap-6">
+                    <div className="w-40 h-40 rounded-full border-4 border-white shadow-xl overflow-hidden bg-gray-200">
                         {formData.avatar_url && <img src={formData.avatar_url} className="w-full h-full object-cover" />}
                     </div>
-                    <button onClick={generateAIAvatar} disabled={isGeneratingAvatar || !formData.name} className="w-full py-2 bg-white border rounded text-[10px] font-black uppercase hover:bg-gray-100">{isGeneratingAvatar ? 'Synthesizing...' : 'Sync Portrait'}</button>
-                    <select className="w-full border p-2 text-[10px] font-black" value={formData.gender} onChange={e => setFormData({ ...formData, gender: e.target.value as any })}><option value="female">Female</option><option value="male">Male</option></select>
+                    <button onClick={generateAIAvatar} disabled={isGeneratingAvatar || !formData.name} className="w-full py-3 bg-white border border-gray-200 rounded text-[10px] font-black uppercase hover:bg-gray-100 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                        {isGeneratingAvatar ? 'Synthesizing...' : '✨ Sync Portrait'}
+                    </button>
+                    <div className="w-full space-y-1">
+                        <label className="text-[10px] font-black uppercase text-gray-400">Hair Style</label>
+                        <select className="w-full border-2 p-3 font-bold text-sm bg-gray-50" value={formData.hair_color} onChange={e => setFormData({ ...formData, hair_color: e.target.value })}>{HAIR_COLORS.map(hc => <option key={hc} value={hc}>{hc}</option>)}</select>
+                    </div>
                 </div>
               </div>
-              <div className="flex justify-end gap-3 mt-10 pt-6 border-t">
+              <div className="flex justify-end gap-3 mt-10 pt-6 border-t border-gray-100">
                 <button onClick={() => setShowConfigModal(false)} className="text-gray-400 font-bold uppercase text-[10px]">Cancel</button>
                 <button onClick={handleSaveBot} disabled={isSaving} className="bg-gray-900 text-white px-10 py-3 rounded font-black uppercase text-[10px] shadow-xl hover:bg-black">{isSaving ? 'Saving...' : 'Commit'}</button>
               </div>

@@ -28,12 +28,13 @@ const DiagnosticsView: React.FC = () => {
 
   const runRepair = async () => {
     setIsRepairing(true);
-    addLog("🛠️ STARTING COMPREHENSIVE REPAIR...");
+    addLog("🛠️ STARTING COMPREHENSIVE SCHEMA REPAIR...");
     try {
       const repairSQL = `
         CREATE TABLE IF NOT EXISTS journalists (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             name TEXT NOT NULL,
+            title TEXT,
             niche TEXT,
             category TEXT,
             schedule TEXT DEFAULT '24h',
@@ -41,10 +42,16 @@ const DiagnosticsView: React.FC = () => {
             last_run TIMESTAMPTZ,
             perspective INTEGER DEFAULT 0,
             gender TEXT DEFAULT 'female',
+            ethnicity TEXT DEFAULT 'White',
+            hair_color TEXT DEFAULT 'Brunette',
             avatar_url TEXT,
             created_at TIMESTAMPTZ DEFAULT now()
         );
 
+        -- Delta synchronization
+        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS title TEXT;
+        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS ethnicity TEXT DEFAULT 'White';
+        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS hair_color TEXT DEFAULT 'Brunette';
         ALTER TABLE journalists ADD COLUMN IF NOT EXISTS avatar_url TEXT;
         ALTER TABLE journalists ADD COLUMN IF NOT EXISTS perspective INTEGER DEFAULT 0;
         ALTER TABLE journalists ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT 'female';
@@ -67,28 +74,13 @@ const DiagnosticsView: React.FC = () => {
       
       if (error) {
         if (error.message.includes('function public.exec_sql(sql) does not exist') || error.code === '42883') {
-          addLog("❌ FATAL: 'exec_sql' helper function is missing.");
-          addLog("--------------------------------------------------");
-          addLog("TO FIX: Copy the SQL from the console (F12) and run it in the Supabase SQL Editor once.");
-          addLog("--------------------------------------------------");
-          console.group("MISSING RPC HELPER - RUN THIS IN SUPABASE SQL EDITOR");
-          console.log(`
-CREATE OR REPLACE FUNCTION exec_sql(sql text)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  EXECUTE sql;
-END;
-$$;
-          `);
-          console.groupEnd();
+          addLog("❌ FATAL: 'exec_sql' helper missing.");
+          console.log(`CREATE OR REPLACE FUNCTION exec_sql(sql text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN EXECUTE sql; END; $$;`);
         } else {
           addLog(`❌ REPAIR ERROR: ${error.message}`);
         }
       } else {
-        addLog("✅ REPAIR SUCCESSFUL: Database schema synchronized.");
+        addLog("✅ REPAIR SUCCESSFUL: Database schema updated.");
       }
     } catch (err: any) {
       addLog(`❌ CRITICAL FAILURE: ${err.message}`);
@@ -169,12 +161,12 @@ $$;
         <header className="mb-10 flex justify-between items-end">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 font-serif">Diagnostics</h1>
-            <p className="text-gray-500 text-sm italic">Audit and fix database schema errors.</p>
+            <p className="text-gray-500 text-sm italic">Schema parity and API health.</p>
           </div>
           <button 
             onClick={runRepair} 
             disabled={isRepairing}
-            className="bg-red-600 text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-red-700 disabled:opacity-50"
+            className="bg-red-600 text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-red-700 disabled:opacity-50 transition-all"
           >
             {isRepairing ? 'Repairing...' : 'Run Repair 🛠️'}
           </button>
@@ -198,7 +190,7 @@ $$;
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           <div className="bg-white rounded shadow-sm border border-gray-200 overflow-hidden">
             <div className="bg-gray-50 px-6 py-4 border-b">
-              <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">Schema Integrity</h3>
+              <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">Integrity Report</h3>
             </div>
             <div className="divide-y">
               {tableHealth.map((table) => (

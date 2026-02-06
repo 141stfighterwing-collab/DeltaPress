@@ -105,6 +105,20 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     <div className="min-h-screen bg-[#e9eaee] font-sans text-gray-800">
       <div className="max-w-[940px] mx-auto bg-white shadow-xl min-h-screen border-x border-gray-200 relative">
         
+        {/* Login Persona Button */}
+        <div className="absolute top-6 right-8 z-20">
+          <Link to={isLoggedIn ? "/admin" : "/login"} className="group flex flex-col items-center gap-1">
+            <div className="w-10 h-10 rounded-full bg-white border border-gray-100 p-1.5 shadow-sm group-hover:shadow group-hover:border-blue-200 transition-all flex items-center justify-center overflow-hidden">
+               <svg className="w-full h-full text-gray-400 group-hover:text-blue-500 transition-colors" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+               </svg>
+            </div>
+            <span className="text-[8px] font-black uppercase tracking-widest text-gray-400 group-hover:text-blue-600 transition-colors">
+              {isLoggedIn ? "Dashboard" : "Login"}
+            </span>
+          </Link>
+        </div>
+
         <header className="p-10 pt-16">
           <Link to="/" className="inline-block group">
             {settings.logo_url ? (

@@ -48,7 +48,12 @@ const DiagnosticsView: React.FC = () => {
             created_at TIMESTAMPTZ DEFAULT now()
         );
 
-        -- Delta synchronization
+        -- Navigation & Hierarchy Updates
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES posts(id) ON DELETE SET NULL;
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS menu_order INTEGER DEFAULT 0;
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS journalist_id UUID;
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS featured_image TEXT;
+
         ALTER TABLE journalists ADD COLUMN IF NOT EXISTS title TEXT;
         ALTER TABLE journalists ADD COLUMN IF NOT EXISTS ethnicity TEXT DEFAULT 'White';
         ALTER TABLE journalists ADD COLUMN IF NOT EXISTS hair_color TEXT DEFAULT 'Brunette';
@@ -58,9 +63,6 @@ const DiagnosticsView: React.FC = () => {
         
         ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS logo_url TEXT;
         ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS theme TEXT DEFAULT 'default';
-        
-        ALTER TABLE posts ADD COLUMN IF NOT EXISTS journalist_id UUID;
-        ALTER TABLE posts ADD COLUMN IF NOT EXISTS featured_image TEXT;
         
         ALTER TABLE journalists ENABLE ROW LEVEL SECURITY;
         DROP POLICY IF EXISTS "Allow public read journalists" ON journalists;
@@ -75,7 +77,6 @@ const DiagnosticsView: React.FC = () => {
       if (error) {
         if (error.message.includes('function public.exec_sql(sql) does not exist') || error.code === '42883') {
           addLog("❌ FATAL: 'exec_sql' helper missing.");
-          console.log(`CREATE OR REPLACE FUNCTION exec_sql(sql text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN EXECUTE sql; END; $$;`);
         } else {
           addLog(`❌ REPAIR ERROR: ${error.message}`);
         }
@@ -161,7 +162,7 @@ const DiagnosticsView: React.FC = () => {
         <header className="mb-10 flex justify-between items-end">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 font-serif">Diagnostics</h1>
-            <p className="text-gray-500 text-sm italic">Schema parity and API health.</p>
+            <p className="text-gray-500 text-sm italic">Audit and fix database schema errors.</p>
           </div>
           <button 
             onClick={runRepair} 

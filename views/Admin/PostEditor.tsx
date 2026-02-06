@@ -20,6 +20,11 @@ const PostEditor: React.FC = () => {
   const [categoryId, setCategoryId] = useState<string>('');
   const [categories, setCategories] = useState<any[]>([]);
   
+  // Hierarchy fields for pages
+  const [parentId, setParentId] = useState<string | null>(null);
+  const [menuOrder, setMenuOrder] = useState(0);
+  const [availablePages, setAvailablePages] = useState<any[]>([]);
+  
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -31,27 +36,23 @@ const PostEditor: React.FC = () => {
   const [showMediaModal, setShowMediaModal] = useState<{ type: 'audio' | 'video', url: string } | null>(null);
   const [aiTopic, setAiTopic] = useState('');
 
-  const fetchCategories = async () => {
+  const fetchData = async () => {
     setCatStatus('loading');
-    setCatErrorMsg('');
     try {
-      const { data: cats, error } = await supabase.from('categories').select('id, name').order('name');
+      // Fetch categories
+      const { data: cats } = await supabase.from('categories').select('id, name').order('name');
+      setCategories(cats || []);
       
-      if (error) {
-        setCatStatus('error');
-        setCatErrorMsg(`Permission Error: ${error.code}`);
-      } else {
-        setCategories(cats || []);
-        if (cats && cats.length === 0) {
-           setCatStatus('error');
-           setCatErrorMsg("Connected but returned 0 rows (Check RLS)");
-        } else {
-           setCatStatus('ok');
-        }
-      }
+      // Fetch other pages for hierarchy (exclude self)
+      let query = supabase.from('posts').select('id, title').eq('type', 'page');
+      if (id) query = query.neq('id', id);
+      const { data: pgs } = await query;
+      setAvailablePages(pgs || []);
+      
+      setCatStatus('ok');
     } catch (err: any) {
       setCatStatus('error');
-      setCatErrorMsg(err.message || "Unknown Network Error");
+      setCatErrorMsg(err.message);
     }
   };
 
@@ -67,7 +68,7 @@ const PostEditor: React.FC = () => {
         return;
       }
 
-      await fetchCategories();
+      await fetchData();
 
       const params = new URLSearchParams(location.search);
       if (params.get('type') === 'page') {
@@ -75,7 +76,7 @@ const PostEditor: React.FC = () => {
       }
 
       if (id) {
-        const { data: post, error } = await supabase.from('posts').select('*').eq('id', id).single();
+        const { data: post } = await supabase.from('posts').select('*').eq('id', id).single();
         if (post) {
           setTitle(post.title || '');
           setContent(post.content || '');
@@ -83,6 +84,8 @@ const PostEditor: React.FC = () => {
           setStatus(post.status || 'publish');
           setFeaturedImage(post.featured_image || '');
           setCategoryId(post.category_id || '');
+          setParentId(post.parent_id);
+          setMenuOrder(post.menu_order || 0);
         }
       }
       setLoading(false);
@@ -141,15 +144,13 @@ const PostEditor: React.FC = () => {
   };
 
   const handleSave = async () => {
-    // 1. Basic Field Presence
     if (!title.trim() || !content.trim()) { 
       alert("Title and content are required."); 
       return; 
     }
 
-    // 2. Length Validation
     if (title.length > LIMITS.POST_TITLE) {
-      alert(`Title is too long (max ${LIMITS.POST_TITLE} chars).`);
+      alert(`Title is too long.`);
       return;
     }
 
@@ -158,10 +159,7 @@ const PostEditor: React.FC = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session.");
 
-      // 3. Security: Sanitize Content before DB Save
       const safeContent = sanitizeHtml(content);
-      
-      // 4. Security: Clean Slug generation
       const timestamp = Date.now().toString().slice(-6);
       const baseSlug = cleanSlug(title);
       const slug = id ? baseSlug : `${baseSlug}-${timestamp}`;
@@ -174,7 +172,9 @@ const PostEditor: React.FC = () => {
         author_id: session.user.id,
         type: contentType,
         featured_image: featuredImage.trim() || null,
-        category_id: categoryId || null
+        category_id: categoryId || null,
+        parent_id: contentType === 'page' ? parentId : null,
+        menu_order: contentType === 'page' ? menuOrder : 0
       };
 
       let res;
@@ -187,119 +187,148 @@ const PostEditor: React.FC = () => {
       if (res.error) throw res.error;
       navigate(contentType === 'page' ? '/admin/pages' : '/admin/posts');
     } catch (err: any) {
-      alert(`Security Check Failed or Save Error: ${err.message}`);
+      alert(`Save Error: ${err.message}`);
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-[#f1f1f1] italic font-serif text-gray-400">Syncing Editor Environment...</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center bg-[#f1f1f1] italic font-serif text-gray-400">Syncing Editor...</div>;
 
   return (
     <div className="flex min-h-screen bg-[#f1f1f1]">
       <AdminSidebar onLogout={() => supabase.auth.signOut().then(() => navigate('/login'))} />
 
       <main className="flex-1 p-6 lg:p-10">
-        <div className="max-w-5xl mx-auto space-y-6">
+        <div className="max-w-6xl mx-auto space-y-6">
           <header className="flex justify-between items-center bg-white p-4 rounded shadow-sm border border-gray-200">
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold text-gray-800 font-serif">{id ? 'Edit' : 'Create'} {contentType}</h1>
               <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${catStatus === 'ok' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                {catStatus === 'ok' ? 'Connected' : 'DB Sync Blocked'}
+                {catStatus === 'ok' ? 'Online' : 'Parity Error'}
               </span>
             </div>
             <div className="flex gap-2">
-              <button type="button" onClick={() => setShowAiModal(true)} className="bg-purple-600 text-white px-4 py-2 rounded text-xs font-black uppercase hover:bg-purple-700 shadow-sm transition-all active:scale-95">✨ AI Draft</button>
+              <button type="button" onClick={() => setShowAiModal(true)} className="bg-purple-600 text-white px-4 py-2 rounded text-xs font-black uppercase hover:bg-purple-700 shadow-sm transition-all">✨ AI Draft</button>
               <button 
                 type="button" onClick={handleSave} disabled={isSaving} 
-                className="bg-[#0073aa] text-white px-6 py-2 rounded text-xs font-black uppercase hover:bg-[#005a87] disabled:opacity-50 shadow-sm transition-all active:scale-95"
+                className="bg-[#0073aa] text-white px-6 py-2 rounded text-xs font-black uppercase hover:bg-[#005a87] disabled:opacity-50 shadow-sm transition-all"
               >
-                {isSaving ? 'Verifying & Saving...' : 'Publish Content'}
+                {isSaving ? 'Saving...' : 'Publish'}
               </button>
             </div>
           </header>
 
-          <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
-            <div className="flex items-center justify-between mb-6 border-b border-gray-100 pb-2">
-                <div className="flex items-center gap-3">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-blue-600">⚙️ Editor Config</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <div className="lg:col-span-3 space-y-6">
+              {/* Main Content Area */}
+              <div className="bg-white shadow-sm border border-gray-200 rounded-sm overflow-hidden">
+                <div className="bg-gray-50 border-b border-gray-100 p-3 flex flex-wrap items-center gap-1 sticky top-0 z-10">
+                  <button type="button" onClick={() => insertFormatting('<b>', '</b>')} className="w-9 h-9 flex items-center justify-center hover:bg-gray-200 rounded font-bold">B</button>
+                  <button type="button" onClick={() => insertFormatting('<i>', '</i>')} className="w-9 h-9 flex items-center justify-center hover:bg-gray-200 rounded italic font-serif">I</button>
+                  <button type="button" onClick={() => insertFormatting('<blockquote>\n', '\n</blockquote>')} className="w-9 h-9 flex items-center justify-center hover:bg-gray-200 rounded text-xs">" "</button>
+                  <div className="h-6 w-px bg-gray-300 mx-2" />
+                  <button type="button" onClick={() => setShowMediaModal({ type: 'audio', url: '' })} className="px-4 h-9 flex items-center justify-center hover:bg-blue-600 hover:text-white rounded text-[10px] font-black uppercase tracking-widest text-blue-600 border border-blue-100 transition-all">🎵 Audio</button>
+                  <button type="button" onClick={() => setShowMediaModal({ type: 'video', url: '' })} className="px-4 h-9 flex items-center justify-center hover:bg-red-600 hover:text-white rounded text-[10px] font-black uppercase tracking-widest text-red-600 border border-red-100 transition-all">🎬 Video</button>
                 </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-              <div className="space-y-2">
-                <label className="block text-[10px] font-black uppercase text-gray-400 tracking-tighter">Category Selection</label>
-                <select 
-                  className={`w-full bg-white border p-3 rounded text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all ${catStatus === 'error' ? 'border-red-500 ring-2 ring-red-100' : 'border-gray-200'}`}
-                  value={categoryId} 
-                  onChange={e => setCategoryId(e.target.value)}
-                >
-                  <option value="">— Uncategorized —</option>
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
-              </div>
 
-              <div className="space-y-2">
-                <label className="block text-[10px] font-black uppercase text-gray-400 tracking-tighter">Visibility Status</label>
-                <select 
-                  className="w-full bg-white border border-gray-200 p-3 rounded text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 font-bold"
-                  value={status} 
-                  onChange={e => setStatus(e.target.value as any)}
-                >
-                  <option value="publish">Published (Public)</option>
-                  <option value="draft">Draft (Private)</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-[10px] font-black uppercase text-gray-400 tracking-tighter">Entry Type</label>
-                <select 
-                  className="w-full bg-white border border-gray-200 p-3 rounded text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 font-bold"
-                  value={contentType} 
-                  onChange={e => setContentType(e.target.value as any)}
-                >
-                  <option value="post">Blog Post</option>
-                  <option value="page">Static Page</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-[10px] font-black uppercase text-gray-400 tracking-tighter">Featured URL</label>
-                <input 
-                  type="text" 
-                  className="w-full bg-white border border-gray-200 p-3 rounded text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-300"
-                  value={featuredImage} 
-                  onChange={e => setFeaturedImage(e.target.value)} 
-                  placeholder="https://images.unsplash..."
-                />
+                <div className="p-10 bg-white min-h-[800px]">
+                  <input 
+                    type="text" placeholder="Enter title here" 
+                    className="w-full text-4xl font-black border-none focus:ring-0 mb-8 font-serif text-[#111] bg-white"
+                    value={title} onChange={(e) => setTitle(e.target.value)}
+                  />
+                  <textarea 
+                    ref={textareaRef}
+                    className="w-full h-[700px] text-xl focus:outline-none resize-none leading-relaxed text-[#111] bg-white font-serif border-none focus:ring-0"
+                    placeholder="Write your next masterpiece..."
+                    value={content} onChange={(e) => setContent(e.target.value)}
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="bg-white shadow-sm border border-gray-200 rounded-sm overflow-hidden">
-            <div className="bg-gray-50 border-b border-gray-100 p-3 flex flex-wrap items-center gap-1 sticky top-0 z-10">
-              <button type="button" onClick={() => insertFormatting('<b>', '</b>')} className="w-9 h-9 flex items-center justify-center hover:bg-gray-200 rounded font-bold transition-colors">B</button>
-              <button type="button" onClick={() => insertFormatting('<i>', '</i>')} className="w-9 h-9 flex items-center justify-center hover:bg-gray-200 rounded italic font-serif transition-colors">I</button>
-              <button type="button" onClick={() => insertFormatting('<blockquote>\n', '\n</blockquote>')} className="w-9 h-9 flex items-center justify-center hover:bg-gray-200 rounded text-xs transition-colors">" "</button>
-              <div className="h-6 w-px bg-gray-300 mx-2" />
-              <button type="button" onClick={() => setShowMediaModal({ type: 'audio', url: '' })} className="px-4 h-9 flex items-center justify-center hover:bg-blue-600 hover:text-white rounded text-[10px] font-black uppercase tracking-widest text-blue-600 border border-blue-100 transition-all">🎵 Audio File</button>
-              <button type="button" onClick={() => setShowMediaModal({ type: 'video', url: '' })} className="px-4 h-9 flex items-center justify-center hover:bg-red-600 hover:text-white rounded text-[10px] font-black uppercase tracking-widest text-red-600 border border-red-100 transition-all">🎬 Video File</button>
-            </div>
+            <div className="space-y-6">
+              {/* Page Attributes Widget */}
+              {contentType === 'page' && (
+                <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-6 border-b pb-2">Page Attributes</h3>
+                  
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-black uppercase text-gray-500">Parent Page</label>
+                      <select 
+                        className="w-full border-2 border-gray-100 p-3 rounded text-sm bg-gray-50 outline-none focus:border-blue-500 font-bold"
+                        value={parentId || ''}
+                        onChange={e => setParentId(e.target.value || null)}
+                      >
+                        <option value="">(no parent)</option>
+                        {availablePages.map(pg => (
+                          <option key={pg.id} value={pg.id}>{pg.title}</option>
+                        ))}
+                      </select>
+                      <p className="text-[9px] text-gray-400 italic">Pages with parents appear in dropdown menus.</p>
+                    </div>
 
-            <div className="p-10 bg-white min-h-[800px]">
-              <input 
-                type="text" placeholder="Enter title here" 
-                className="w-full text-4xl font-black border-none focus:ring-0 mb-8 font-serif text-[#111] bg-white placeholder-gray-200"
-                value={title} onChange={(e) => setTitle(e.target.value)}
-              />
-              <textarea 
-                ref={textareaRef}
-                className="w-full h-[700px] text-xl focus:outline-none resize-none leading-relaxed text-[#111] bg-white font-serif border-none focus:ring-0 placeholder-gray-200"
-                placeholder="Write your next masterpiece..."
-                value={content} onChange={(e) => setContent(e.target.value)}
-              />
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-black uppercase text-gray-500">Menu Order</label>
+                      <input 
+                        type="number" 
+                        className="w-full border-2 border-gray-100 p-3 rounded text-sm bg-gray-50 outline-none focus:border-blue-500 font-bold"
+                        value={menuOrder}
+                        onChange={e => setMenuOrder(parseInt(e.target.value) || 0)}
+                      />
+                      <p className="text-[9px] text-gray-400 italic">Determines the horizontal/vertical sequence (Lower first).</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Status & Options Widget */}
+              <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-6 border-b pb-2">Publish Settings</h3>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black uppercase text-gray-500">Status</label>
+                    <select 
+                      className="w-full border-2 border-gray-100 p-3 rounded text-sm bg-gray-50 outline-none focus:border-blue-500 font-bold"
+                      value={status} 
+                      onChange={e => setStatus(e.target.value as any)}
+                    >
+                      <option value="publish">Published</option>
+                      <option value="draft">Draft</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black uppercase text-gray-500">Featured Image URL</label>
+                    <input 
+                      type="text" 
+                      className="w-full border-2 border-gray-100 p-3 rounded text-sm bg-gray-50 outline-none focus:border-blue-500"
+                      value={featuredImage} 
+                      onChange={e => setFeaturedImage(e.target.value)} 
+                      placeholder="https://..."
+                    />
+                  </div>
+                  
+                  {contentType === 'post' && (
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-black uppercase text-gray-500">Category</label>
+                      <select 
+                        className="w-full border-2 border-gray-100 p-3 rounded text-sm bg-gray-50 outline-none focus:border-blue-500 font-bold"
+                        value={categoryId} 
+                        onChange={e => setCategoryId(e.target.value)}
+                      >
+                        <option value="">Uncategorized</option>
+                        {categories.map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -311,24 +340,17 @@ const PostEditor: React.FC = () => {
           <div className="bg-white p-10 rounded-xl max-w-lg w-full shadow-2xl border-t-8 border-gray-900">
             <div className="mb-6">
                 <h2 className="text-3xl font-bold font-serif text-gray-900">{showMediaModal.type === 'audio' ? '🎵 Audio Block' : '🎬 Video Block'}</h2>
-                <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-1">Direct URL (Dropbox, YouTube, etc.)</p>
+                <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-1">Source URL</p>
             </div>
-
             <div className="space-y-6">
-                <div>
-                    <label className="block text-[10px] font-black uppercase text-gray-500 mb-2">Source URL</label>
-                    <input 
-                    type="url" className="w-full border-2 border-gray-100 p-4 rounded-lg outline-none focus:border-blue-500 text-gray-900 bg-gray-50 font-mono text-sm" 
-                    placeholder={showMediaModal.type === 'audio' ? 'https://example.com/audio.mp3' : 'https://example.com/video.mp4'} 
-                    value={showMediaModal.url}
-                    onChange={(e) => setShowMediaModal({ ...showMediaModal, url: e.target.value })} 
-                    autoFocus
-                    />
-                </div>
-                
+                <input 
+                  type="url" className="w-full border-2 border-gray-100 p-4 rounded-lg outline-none focus:border-blue-500 text-gray-900 bg-gray-50 font-mono text-sm" 
+                  placeholder="https://..." value={showMediaModal.url}
+                  onChange={(e) => setShowMediaModal({ ...showMediaModal, url: e.target.value })} 
+                />
                 <div className="flex justify-end gap-3 pt-6 border-t">
                     <button type="button" onClick={() => setShowMediaModal(null)} className="text-gray-400 font-bold px-4 uppercase text-[10px] tracking-widest">Cancel</button>
-                    <button type="button" onClick={handleInsertMedia} className="bg-gray-900 text-white px-10 py-3 rounded-lg font-black uppercase text-[10px] tracking-widest hover:bg-black shadow-xl active:scale-95 transition-all">Insert into post</button>
+                    <button type="button" onClick={handleInsertMedia} className="bg-gray-900 text-white px-10 py-3 rounded-lg font-black uppercase text-[10px] shadow-xl">Insert</button>
                 </div>
             </div>
           </div>
@@ -340,13 +362,12 @@ const PostEditor: React.FC = () => {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[100] backdrop-blur-sm">
           <div className="bg-white p-8 rounded-xl max-w-md w-full shadow-2xl">
             <h2 className="text-2xl font-bold mb-2 font-serif text-gray-900">🤖 AI Ghostwriter</h2>
-            <p className="text-xs text-gray-400 mb-6 uppercase tracking-widest font-black">Synthesizing Creative Drafts</p>
             <input 
-              type="text" className="w-full border-2 border-gray-100 p-4 rounded-lg mb-6 outline-none focus:border-purple-500 text-gray-900 bg-white" 
-              placeholder="What topic should I write about?" value={aiTopic} onChange={(e) => setAiTopic(e.target.value)} disabled={isGenerating}
+              type="text" className="w-full border-2 border-gray-100 p-4 rounded-lg mb-6 outline-none focus:border-purple-500" 
+              placeholder="Draft topic..." value={aiTopic} onChange={(e) => setAiTopic(e.target.value)}
             />
             <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => setShowAiModal(false)} className="text-gray-400 font-bold px-4 uppercase text-[10px] tracking-widest">Cancel</button>
+              <button type="button" onClick={() => setShowAiModal(false)} className="text-gray-400 font-bold px-4 uppercase text-[10px]">Cancel</button>
               <button 
                 type="button" disabled={isGenerating || !aiTopic}
                 onClick={async () => {
@@ -356,9 +377,9 @@ const PostEditor: React.FC = () => {
                   setIsGenerating(false);
                   setShowAiModal(false);
                 }}
-                className="bg-purple-600 text-white px-8 py-3 rounded-lg font-black uppercase text-[10px] tracking-widest hover:bg-purple-700 disabled:opacity-50 shadow-lg"
+                className="bg-purple-600 text-white px-8 py-3 rounded-lg font-black uppercase text-[10px]"
               >
-                {isGenerating ? 'Synthesizing...' : 'Generate Block'}
+                {isGenerating ? 'Drafting...' : 'Generate'}
               </button>
             </div>
           </div>

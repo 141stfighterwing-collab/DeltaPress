@@ -104,14 +104,14 @@ const SinglePost: React.FC = () => {
   return (
     <Layout>
       <article>
-        <header className="mb-6">
-          <h1 className="text-4xl lg:text-5xl font-black mb-4 text-gray-900 leading-tight font-serif">{post.title}</h1>
+        <header className="mb-4">
+          <h1 className="text-3xl lg:text-5xl font-black mb-2 text-gray-900 leading-tight font-serif">{post.title}</h1>
           <div className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] flex items-center gap-3">
             <span>{new Date(post.created_at).toLocaleDateString()}</span>
             <span>•</span>
             {authorInfo ? (
                 <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full overflow-hidden border border-gray-100 bg-gray-50 shadow-sm">
+                    <div className="w-5 h-5 rounded-full overflow-hidden border border-gray-100 bg-gray-50 shadow-sm">
                         <img 
                           src={authorInfo.avatar} 
                           alt={authorInfo.name} 
@@ -127,20 +127,19 @@ const SinglePost: React.FC = () => {
           </div>
         </header>
 
-        {/* Featured Image Placement */}
         {post.featured_image && (
-          <div className="mb-8 rounded-sm overflow-hidden shadow-xl border border-gray-100 bg-gray-50">
-            <img src={post.featured_image} className="w-full h-auto max-h-[600px] object-cover" alt={post.title} />
+          <div className="mb-6 rounded-sm overflow-hidden shadow-xl border border-gray-100 bg-gray-50">
+            <img src={post.featured_image} className="w-full h-auto max-h-[500px] object-cover" alt={post.title} />
           </div>
         )}
 
         <div className="wp-entry-content font-serif" dangerouslySetInnerHTML={{ __html: post.content }} />
 
-        <section className="mt-24 border-t border-gray-100 pt-16">
-          <h3 className="text-2xl font-bold font-serif mb-10 text-gray-900">{comments.length} Thoughts on this post</h3>
-          <div className="space-y-8 mb-16">
+        <section className="mt-16 border-t border-gray-100 pt-10">
+          <h3 className="text-2xl font-bold font-serif mb-6 text-gray-900">{comments.length} Thoughts on this post</h3>
+          <div className="space-y-6 mb-12">
             {comments.map((c, i) => (
-              <div key={i} className="flex gap-4">
+              <div key={i} className="flex gap-4 border-b border-gray-50 pb-6 last:border-0">
                 <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center font-bold text-gray-400 shrink-0">
                   {c.author_name ? c.author_name[0].toUpperCase() : '?'}
                 </div>
@@ -149,19 +148,19 @@ const SinglePost: React.FC = () => {
                     <span className="text-xs font-black uppercase tracking-tight text-gray-900">{c.author_name}</span>
                     <span className="text-[10px] text-gray-400 uppercase">{new Date(c.created_at).toLocaleDateString()}</span>
                   </div>
-                  <div className="text-sm text-gray-700 font-serif bg-white p-4 border border-gray-100 shadow-sm rounded-sm" dangerouslySetInnerHTML={{ __html: c.content }} />
+                  <div className="text-sm text-gray-700 font-serif leading-relaxed" dangerouslySetInnerHTML={{ __html: c.content }} />
                 </div>
               </div>
             ))}
           </div>
 
-          <h3 className="text-2xl font-bold font-serif mb-6 text-gray-800">Leave a Reply</h3>
-          <form onSubmit={handlePostComment} className="bg-[#f9f9f9] p-8 border border-gray-100 rounded-sm">
+          <h3 className="text-xl font-bold font-serif mb-4 text-gray-800">Leave a Reply</h3>
+          <form onSubmit={handlePostComment} className="bg-[#f9f9f9] p-6 border border-gray-100 rounded-sm">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <input type="text" placeholder="Name *" required className="w-full border border-gray-300 p-3 text-sm focus:border-[#72aee6] outline-none bg-white text-gray-900" value={commentName} onChange={e => setCommentName(e.target.value)} />
               <input type="email" placeholder="Email *" required className="w-full border border-gray-300 p-3 text-sm focus:border-[#72aee6] outline-none bg-white text-gray-900" value={commentEmail} onChange={e => setCommentEmail(e.target.value)} />
             </div>
-            <textarea placeholder="Comment *" required className="w-full border border-gray-300 p-4 mb-4 text-sm h-40 focus:border-[#72aee6] outline-none bg-white text-gray-900 font-serif" value={commentText} onChange={e => setCommentText(e.target.value)} />
+            <textarea placeholder="Comment *" required className="w-full border border-gray-300 p-4 mb-4 text-sm h-32 focus:border-[#72aee6] outline-none bg-white text-gray-900 font-serif" value={commentText} onChange={e => setCommentText(e.target.value)} />
             <button type="submit" disabled={isSubmitting} className="bg-[#1d2327] text-white px-8 py-3 font-black uppercase text-[10px] tracking-widest rounded-sm hover:bg-black disabled:opacity-50 transition-all active:scale-95 shadow-lg">
               {isSubmitting ? 'Posting...' : 'Post Comment'}
             </button>

@@ -30,6 +30,7 @@ const FREQUENCIES = [
   { id: '24h', label: 'Once Daily', hours: 24 },
   { id: '2w', label: 'Twice Weekly', hours: 84 },
   { id: '1w', label: 'Once a Week', hours: 168 },
+  { id: '2m', label: 'Twice a Month', hours: 360 },
   { id: '1m', label: 'Once a Month', hours: 720 }
 ];
 
@@ -134,7 +135,7 @@ const JournalistsView: React.FC = () => {
         title: bot.title || '',
         niche: bot.niche, 
         category: bot.category,
-        schedule: bot.schedule, 
+        schedule: bot.schedule || '24h', 
         perspective: bot.perspective, 
         gender: bot.gender,
         ethnicity: bot.ethnicity || 'White',
@@ -257,9 +258,41 @@ const JournalistsView: React.FC = () => {
                     <label className="text-[10px] font-black uppercase text-gray-400">Beat / Topic</label>
                     <input type="text" className="w-full border-2 p-3 font-bold text-sm bg-gray-50 focus:border-blue-500 outline-none" value={formData.niche} onChange={e => setFormData({ ...formData, niche: e.target.value })} />
                   </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400">Post Frequency</label>
+                    <select className="w-full border-2 p-3 font-bold text-sm bg-gray-50 focus:border-blue-500 outline-none" value={formData.schedule} onChange={e => setFormData({ ...formData, schedule: e.target.value })}>
+                        {FREQUENCIES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                    </select>
+                  </div>
+                  
+                  {/* Perspective Slider */}
+                  <div className="space-y-2 pt-2 pb-2">
+                    <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black uppercase text-gray-400">Political Perspective</label>
+                        <span className="text-[9px] font-black text-blue-600 uppercase bg-blue-50 px-2 py-0.5 rounded">{SPECTRUM_LABELS[formData.perspective]}</span>
+                    </div>
+                    <input 
+                      type="range" min="-3" max="3" step="1"
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-gray-900"
+                      value={formData.perspective}
+                      onChange={e => setFormData({ ...formData, perspective: parseInt(e.target.value) })}
+                    />
+                    <div className="flex justify-between text-[8px] font-bold text-gray-300 uppercase">
+                        <span>Far Left</span>
+                        <span>Neutral</span>
+                        <span>Far Right</span>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
-                    <select className="w-full border-2 p-3 font-bold text-sm bg-gray-50" value={formData.gender} onChange={e => setFormData({ ...formData, gender: e.target.value as any })}><option value="female">Female</option><option value="male">Male</option></select>
-                    <select className="w-full border-2 p-3 font-bold text-sm bg-gray-50" value={formData.ethnicity} onChange={e => setFormData({ ...formData, ethnicity: e.target.value })}>{ETHNICITIES.map(et => <option key={et} value={et}>{et}</option>)}</select>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase text-gray-400">Gender</label>
+                        <select className="w-full border-2 p-3 font-bold text-sm bg-gray-50" value={formData.gender} onChange={e => setFormData({ ...formData, gender: e.target.value as any })}><option value="female">Female</option><option value="male">Male</option></select>
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase text-gray-400">Ethnicity</label>
+                        <select className="w-full border-2 p-3 font-bold text-sm bg-gray-50" value={formData.ethnicity} onChange={e => setFormData({ ...formData, ethnicity: e.target.value })}>{ETHNICITIES.map(et => <option key={et} value={et}>{et}</option>)}</select>
+                    </div>
                   </div>
                 </div>
                 <div className="bg-gray-50 p-6 rounded border flex flex-col items-center gap-6">

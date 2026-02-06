@@ -143,6 +143,19 @@ const PostEditor: React.FC = () => {
     setShowMediaModal(null);
   };
 
+  /**
+   * Helper to strip document-level tags if they were generated/pasted.
+   */
+  const cleanDocumentWrappers = (html: string) => {
+    let clean = html.replace(/<!DOCTYPE html>/gi, '');
+    clean = clean.replace(/<html[^>]*>/gi, '');
+    clean = clean.replace(/<\/html>/gi, '');
+    clean = clean.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '');
+    clean = clean.replace(/<body[^>]*>/gi, '');
+    clean = clean.replace(/<\/body>/gi, '');
+    return clean.trim();
+  };
+
   const handleSave = async () => {
     if (!title.trim() || !content.trim()) { 
       alert("Title and content are required."); 
@@ -150,16 +163,19 @@ const PostEditor: React.FC = () => {
     }
 
     if (title.length > LIMITS.POST_TITLE) {
-      alert(`Title is too long.`);
+      alert(`Title exceeds limit of ${LIMITS.POST_TITLE} characters.`);
       return;
     }
 
     setIsSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("No active session.");
+      if (!session) throw new Error("No active session. Please log in again.");
 
-      const safeContent = sanitizeHtml(content);
+      // CRITICAL: Clean full HTML docs into content fragments
+      const fragmentOnly = cleanDocumentWrappers(content);
+      const safeContent = sanitizeHtml(fragmentOnly);
+      
       const timestamp = Date.now().toString().slice(-6);
       const baseSlug = cleanSlug(title);
       const slug = id ? baseSlug : `${baseSlug}-${timestamp}`;
@@ -184,10 +200,14 @@ const PostEditor: React.FC = () => {
         res = await supabase.from('posts').insert([postData]);
       }
 
-      if (res.error) throw res.error;
+      if (res.error) {
+          console.error("Supabase Save Error:", res.error);
+          throw new Error(`${res.error.message} (Code: ${res.error.code}). Ensure your database is healthy via Diagnostics.`);
+      }
+      
       navigate(contentType === 'page' ? '/admin/pages' : '/admin/posts');
     } catch (err: any) {
-      alert(`Save Error: ${err.message}`);
+      alert(`Publish Failed: ${err.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -372,8 +392,13 @@ const PostEditor: React.FC = () => {
                 type="button" disabled={isGenerating || !aiTopic}
                 onClick={async () => {
                   setIsGenerating(true);
-                  const res = await generateBlogPostDraft(aiTopic);
-                  if (res) setContent(res);
+                  // Added explicit instruction to Gemini to NOT provide full HTML documents
+                  const res = await generateBlogPostDraft(aiTopic + " (Note: Do NOT include <html> or <body> tags, just provide inner article HTML fragments)");
+                  if (res) {
+                      // Strip any wrappers Gemini might have provided despite instructions
+                      const cleaned = cleanDocumentWrappers(res);
+                      setContent(cleaned);
+                  }
                   setIsGenerating(false);
                   setShowAiModal(false);
                 }}

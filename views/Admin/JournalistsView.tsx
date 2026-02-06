@@ -178,26 +178,64 @@ const JournalistsView: React.FC = () => {
 
   const handleRunBot = async (bot: Bot) => {
     setIsDeploying(bot.id);
-    setDeploymentStep('Drafting...');
+    setDeploymentStep('Brainstorming...');
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      
+      // 1. Generate Article Text
       const textResponse = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Write a 500-word ${bot.category} article about ${bot.niche}. Tone: ${SPECTRUM_LABELS[bot.perspective]}. HTML format.`,
+        contents: `You are ${bot.name}, a journalist specializing in ${bot.category}. 
+        Write a 600-word deep-dive article about ${bot.niche}. 
+        Tone: ${SPECTRUM_LABELS[bot.perspective]}. 
+        Format: Return ONLY valid HTML starting with <h1> for the title, followed by <p>, <h2>, and <blockquote>. 
+        CRITICAL: Do NOT wrap the response in markdown code blocks like \`\`\`html.`,
         config: { tools: [{ googleSearch: {} }] }
       });
-      const fullText = textResponse.text || '';
+      
+      let fullText = textResponse.text || '';
+      // Strip markdown code blocks if the model ignored instructions
+      fullText = fullText.replace(/^```html\n?|```$/g, '').trim();
+
       const title = fullText.match(/<h1>(.*?)<\/h1>/)?.[1] || `${bot.niche} Update`;
       const content = fullText.replace(/<h1>.*?<\/h1>/, '').trim();
 
+      // 2. Generate Featured Image
+      setDeploymentStep('Photographing...');
+      let featuredImageUrl = null;
+      try {
+        const imagePrompt = `A high-quality, professional editorial photograph representing the topic: ${title}. Cinematic style, 16:9 aspect ratio, suitable for a news publication header.`;
+        const imgResponse = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: { parts: [{ text: imagePrompt }] },
+            config: { imageConfig: { aspectRatio: "16:9" } }
+        });
+        const imgPart = imgResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+        if (imgPart?.inlineData) {
+            featuredImageUrl = `data:image/png;base64,${imgPart.inlineData.data}`;
+        }
+      } catch (e) {
+        console.error("Image generation failed, proceeding without image", e);
+      }
+
+      // 3. Save to Database
+      setDeploymentStep('Publishing...');
       const { data: { session } } = await supabase.auth.getSession();
       await supabase.from('posts').insert({
-        title, content, status: 'publish', author_id: session?.user?.id, journalist_id: bot.id, type: 'post',
+        title, 
+        content, 
+        status: 'publish', 
+        author_id: session?.user?.id, 
+        journalist_id: bot.id, 
+        type: 'post',
+        featured_image: featuredImageUrl,
         slug: title.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-') + '-' + Date.now().toString().slice(-4)
       });
       await supabase.from('journalists').update({ last_run: new Date().toISOString() }).eq('id', bot.id);
       fetchBots();
-    } catch (err) {} finally { setIsDeploying(null); }
+    } catch (err) {
+        console.error("Journalist deployment error:", err);
+    } finally { setIsDeploying(null); }
   };
 
   return (
@@ -230,6 +268,7 @@ const JournalistsView: React.FC = () => {
                   <div className="bg-[#1d2327] text-white p-5 rounded border-l-4 border-blue-500">
                       <div className="text-[10px] font-black uppercase text-blue-400 mb-1">Status</div>
                       <div className="text-3xl font-mono font-black">{isDeploying === bot.id ? 'BUSY' : calculateCountdown(calculateNextRun(bot))}</div>
+                      {isDeploying === bot.id && <div className="text-[10px] font-black uppercase text-blue-300 mt-2 animate-pulse">{deploymentStep}</div>}
                   </div>
                </div>
                <div className="p-8 pt-0 flex gap-2">

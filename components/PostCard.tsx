@@ -23,13 +23,13 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
 
       // 2. Fetch Journalist if exists
       if (post.journalist_id) {
-        const { data: bot } = await supabase.from('journalists').select('name, gender').eq('id', post.journalist_id).maybeSingle();
+        const { data: bot } = await supabase.from('journalists').select('name, gender, avatar_url').eq('id', post.journalist_id).maybeSingle();
         if (bot) {
           setAuthorInfo({
             name: bot.name,
-            avatar: bot.gender === 'male' 
-              ? 'https://picsum.photos/id/1012/100/100' 
-              : 'https://picsum.photos/id/1027/100/100'
+            avatar: bot.avatar_url || (bot.gender === 'male' 
+              ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop' 
+              : 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop')
           });
         }
       }
@@ -70,7 +70,7 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
                       src={authorInfo.avatar} 
                       alt={authorInfo.name} 
                       className="w-full h-full object-cover" 
-                      onError={(e) => { (e.target as HTMLImageElement).src = 'https://picsum.photos/100/100'; }}
+                      onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop'; }}
                     />
                   </div>
                   <span className="text-[#1d2327] font-black">{authorInfo.name}</span>

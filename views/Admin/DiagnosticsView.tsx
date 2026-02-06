@@ -28,9 +28,13 @@ const DiagnosticsView: React.FC = () => {
 
   const runRepair = async () => {
     setIsRepairing(true);
-    addLog("🛠️ STARTING COMPREHENSIVE SCHEMA REPAIR...");
+    addLog("🛠️ STARTING SUPREME SCHEMA REPAIR...");
     try {
       const repairSQL = `
+        -- Ensure Extensions
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+        -- Journalists Table
         CREATE TABLE IF NOT EXISTS journalists (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             name TEXT NOT NULL,
@@ -48,22 +52,26 @@ const DiagnosticsView: React.FC = () => {
             created_at TIMESTAMPTZ DEFAULT now()
         );
 
-        -- Navigation & Hierarchy Updates
+        -- Posts Table Integrity
         ALTER TABLE posts ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES posts(id) ON DELETE SET NULL;
         ALTER TABLE posts ADD COLUMN IF NOT EXISTS menu_order INTEGER DEFAULT 0;
         ALTER TABLE posts ADD COLUMN IF NOT EXISTS journalist_id UUID;
         ALTER TABLE posts ADD COLUMN IF NOT EXISTS featured_image TEXT;
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS category_id UUID;
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'post';
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS slug TEXT;
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS excerpt TEXT;
 
-        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS title TEXT;
-        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS ethnicity TEXT DEFAULT 'White';
-        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS hair_color TEXT DEFAULT 'Brunette';
-        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS avatar_url TEXT;
-        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS perspective INTEGER DEFAULT 0;
-        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT 'female';
-        
+        -- Site Settings Integrity
         ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS logo_url TEXT;
         ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS theme TEXT DEFAULT 'default';
-        
+        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS slogan TEXT;
+        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS header_image TEXT;
+        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS header_fit TEXT DEFAULT 'cover';
+        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS header_pos_x INTEGER DEFAULT 50;
+        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS header_pos_y INTEGER DEFAULT 50;
+
+        -- RLS Policies
         ALTER TABLE journalists ENABLE ROW LEVEL SECURITY;
         DROP POLICY IF EXISTS "Allow public read journalists" ON journalists;
         CREATE POLICY "Allow public read journalists" ON journalists FOR SELECT USING (true);
@@ -71,17 +79,17 @@ const DiagnosticsView: React.FC = () => {
         CREATE POLICY "Allow authenticated manage journalists" ON journalists FOR ALL USING (auth.role() = 'authenticated');
       `;
       
-      addLog("📡 Calling Supabase RPC 'exec_sql'...");
+      addLog("📡 Executing Database Realignment...");
       const { error } = await supabase.rpc('exec_sql', { sql: repairSQL });
       
       if (error) {
-        if (error.message.includes('function public.exec_sql(sql) does not exist') || error.code === '42883') {
-          addLog("❌ FATAL: 'exec_sql' helper missing.");
+        if (error.code === '42883') {
+          addLog("❌ Error: RPC 'exec_sql' not found. Please contact support to enable raw SQL execution.");
         } else {
           addLog(`❌ REPAIR ERROR: ${error.message}`);
         }
       } else {
-        addLog("✅ REPAIR SUCCESSFUL: Database schema updated.");
+        addLog("✅ SUPREME REPAIR SUCCESSFUL: Database schema is now in parity.");
       }
     } catch (err: any) {
       addLog(`❌ CRITICAL FAILURE: ${err.message}`);
@@ -167,9 +175,9 @@ const DiagnosticsView: React.FC = () => {
           <button 
             onClick={runRepair} 
             disabled={isRepairing}
-            className="bg-red-600 text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-red-700 disabled:opacity-50 transition-all"
+            className="bg-red-600 text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-red-700 disabled:opacity-50 transition-all shadow-lg active:scale-95"
           >
-            {isRepairing ? 'Repairing...' : 'Run Repair 🛠️'}
+            {isRepairing ? 'Repairing...' : 'Supreme Repair 🛠️'}
           </button>
         </header>
 

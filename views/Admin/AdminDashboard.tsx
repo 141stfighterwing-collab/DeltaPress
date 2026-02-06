@@ -20,6 +20,11 @@ const AdminDashboard: React.FC = () => {
     health: 'Good'
   });
 
+  const [branding, setBranding] = useState({
+    title: '',
+    logo_url: ''
+  });
+
   const fetchStats = async (userRole: string, userId: string) => {
     try {
       // Basic users only see their own stats for comments
@@ -51,6 +56,15 @@ const AdminDashboard: React.FC = () => {
         messages: messageCount,
         health: 'Good'
       });
+
+      // Fetch branding
+      const { data: siteSettings } = await supabase.from('site_settings').select('title, logo_url').eq('id', 1).maybeSingle();
+      if (siteSettings) {
+        setBranding({
+            title: siteSettings.title,
+            logo_url: siteSettings.logo_url
+        });
+      }
     } catch (err) {
       console.error("Error fetching dashboard telemetry:", err);
       setStats(prev => ({ ...prev, health: 'Degraded' }));
@@ -144,8 +158,8 @@ const AdminDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden lg:col-span-2">
             <div className="p-4 border-b border-gray-50 bg-gray-50/50 font-black text-[10px] uppercase tracking-widest text-gray-500">System Inventory</div>
             <div className="p-8 space-y-6">
               <div className="flex items-center justify-between border-b border-gray-50 pb-4">
@@ -170,7 +184,26 @@ const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-gray-900 rounded-lg shadow-2xl p-8 flex flex-col justify-center text-white relative overflow-hidden group">
+          <Link to="/admin/settings" className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden hover:shadow-md transition-shadow group">
+            <div className="p-4 border-b border-gray-50 bg-gray-50/50 font-black text-[10px] uppercase tracking-widest text-gray-500 flex justify-between">
+                <span>Site Identity</span>
+                <span className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">Edit &rarr;</span>
+            </div>
+            <div className="p-8 flex flex-col items-center text-center">
+                {branding.logo_url ? (
+                    <div className="w-24 h-24 bg-gray-50 rounded-lg border border-gray-100 p-2 mb-4 flex items-center justify-center">
+                        <img src={branding.logo_url} alt="Logo" className="max-w-full max-h-full object-contain" />
+                    </div>
+                ) : (
+                    <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center text-2xl mb-4 text-gray-300">🖼️</div>
+                )}
+                <h4 className="text-lg font-bold text-gray-800 font-serif leading-tight">{branding.title || 'Twenty Ten'}</h4>
+                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mt-2">Active Branding</p>
+            </div>
+          </Link>
+        </div>
+
+        <div className="mt-8 bg-gray-900 rounded-lg shadow-2xl p-8 flex flex-col justify-center text-white relative overflow-hidden group">
              <div className="absolute inset-0 bg-blue-600 opacity-0 group-hover:opacity-10 transition-opacity duration-700"></div>
              <div className="relative z-10">
                 <h3 className="text-4xl font-black font-serif mb-4 leading-tight">Ready to join the conversation?</h3>
@@ -182,7 +215,6 @@ const AdminDashboard: React.FC = () => {
                    <Link to="/admin/appearance" className="bg-white text-gray-900 px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 transition-all shadow-lg active:scale-95">Customizer</Link>
                 </div>
              </div>
-          </div>
         </div>
       </main>
     </div>

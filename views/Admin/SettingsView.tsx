@@ -23,6 +23,7 @@ const SettingsView: React.FC = () => {
   const [formData, setFormData] = useState({
     title: '',
     slogan: '',
+    logo_url: '',
     header_image: '',
     header_fit: 'cover' as 'cover' | 'contain' | 'none' | 'scale-down',
     header_pos_x: 50,
@@ -40,6 +41,7 @@ const SettingsView: React.FC = () => {
           setFormData({
             title: data.title || '',
             slogan: data.slogan || '',
+            logo_url: data.logo_url || '',
             header_image: data.header_image || DEFAULT_HEADERS[0].url,
             header_fit: data.header_fit || 'cover',
             header_pos_x: data.header_pos_x ?? 50,
@@ -81,7 +83,11 @@ const SettingsView: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.header_image && !isValidUrl(formData.header_image)) {
-      alert("Invalid image URL.");
+      alert("Invalid header image URL.");
+      return;
+    }
+    if (formData.logo_url && !isValidUrl(formData.logo_url)) {
+      alert("Invalid logo URL.");
       return;
     }
 
@@ -92,6 +98,7 @@ const SettingsView: React.FC = () => {
         id: 1,
         title: stripAllHtml(formData.title),
         slogan: stripAllHtml(formData.slogan),
+        logo_url: formData.logo_url,
         header_image: formData.header_image,
         header_fit: formData.header_fit,
         header_pos_x: formData.header_pos_x,
@@ -118,7 +125,7 @@ const SettingsView: React.FC = () => {
       <main className="flex-1 p-6 lg:p-10 max-w-5xl">
         <header className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 font-serif">Site Settings</h1>
-          <p className="text-gray-600 text-sm italic">Configure your banner, site identity, and safety guards.</p>
+          <p className="text-gray-600 text-sm italic">Configure your banner, site identity, and branding.</p>
         </header>
 
         {error && (
@@ -199,6 +206,25 @@ const SettingsView: React.FC = () => {
                   onChange={e => setFormData({...formData, slogan: e.target.value})}
                 />
               </div>
+            </div>
+
+            <div className="pt-8 border-t border-gray-100">
+                <label className="block text-xs font-black uppercase text-gray-500 mb-2 tracking-widest">Site Logo URL</label>
+                <div className="flex gap-4 items-center">
+                    <input 
+                        type="text" 
+                        placeholder="https://example.com/logo.png"
+                        className={`flex-1 border-2 p-4 rounded text-sm font-mono focus:ring-2 outline-none transition-all ${formData.logo_url && !isValidUrl(formData.logo_url) ? 'border-red-500 bg-red-50' : 'border-gray-100 bg-gray-50'}`}
+                        value={formData.logo_url}
+                        onChange={e => setFormData({...formData, logo_url: e.target.value})}
+                    />
+                    {formData.logo_url && isValidUrl(formData.logo_url) && (
+                        <div className="w-16 h-16 bg-gray-100 border border-gray-200 rounded flex items-center justify-center p-2">
+                            <img src={formData.logo_url} alt="Logo Preview" className="max-w-full max-h-full object-contain" />
+                        </div>
+                    )}
+                </div>
+                <p className="text-[9px] text-gray-400 italic mt-2 uppercase tracking-tighter">If set, this logo will appear in the site header instead of text.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-8 border-t border-gray-100">

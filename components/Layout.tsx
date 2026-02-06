@@ -16,6 +16,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [settings, setSettings] = useState({
     title: 'Twenty Ten',
     slogan: 'Just another WordPress theme',
+    logo_url: '',
     header_image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&q=80&w=940&h=200',
     header_fit: 'cover' as 'cover' | 'contain' | 'none' | 'scale-down',
     header_pos_x: 50,
@@ -38,6 +39,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         setSettings({
           title: siteSettings.title || 'Twenty Ten',
           slogan: siteSettings.slogan || 'Just another WordPress theme',
+          logo_url: siteSettings.logo_url || '',
           header_image: siteSettings.header_image || 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&q=80&w=940&h=200',
           header_fit: siteSettings.header_fit || 'cover',
           header_pos_x: siteSettings.header_pos_x ?? 50,
@@ -92,9 +94,19 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
         <header className="p-10 pt-16">
           <Link to="/" className="inline-block group">
-            <h1 className="text-4xl font-black text-gray-900 leading-none mb-2 font-serif group-hover:text-blue-700 transition-colors">
-              {settings.title}
-            </h1>
+            {settings.logo_url ? (
+                <div className="mb-2">
+                    <img 
+                      src={settings.logo_url} 
+                      alt={settings.title} 
+                      className="max-h-20 w-auto object-contain group-hover:opacity-80 transition-opacity" 
+                    />
+                </div>
+            ) : (
+                <h1 className="text-4xl font-black text-gray-900 leading-none mb-2 font-serif group-hover:text-blue-700 transition-colors">
+                  {settings.title}
+                </h1>
+            )}
           </Link>
           <p className="text-xs text-gray-500 italic uppercase tracking-widest font-bold">
             {settings.slogan}

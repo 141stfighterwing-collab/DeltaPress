@@ -42,15 +42,15 @@ const SinglePost: React.FC = () => {
           if (cat) setCategoryName(cat.name);
         }
 
-        // Fetch Bot Info
+        // Fetch Journalist Info
         if (postData.journalist_id) {
-            const { data: bot } = await supabase.from('journalists').select('name, gender').eq('id', postData.journalist_id).maybeSingle();
+            const { data: bot } = await supabase.from('journalists').select('name, gender, avatar_url').eq('id', postData.journalist_id).maybeSingle();
             if (bot) {
                 setAuthorInfo({
                     name: bot.name,
-                    avatar: bot.gender === 'male' 
-                    ? 'https://picsum.photos/id/1012/100/100' 
-                    : 'https://picsum.photos/id/1027/100/100'
+                    avatar: bot.avatar_url || (bot.gender === 'male' 
+                    ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop' 
+                    : 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop')
                 });
             }
         }
@@ -92,7 +92,7 @@ const SinglePost: React.FC = () => {
       setCommentText('');
       fetchPostAndMetadata();
     } catch (err: any) {
-      alert("Submission Blocked: " + err.message);
+      alert("Submission Error: " + err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -104,8 +104,8 @@ const SinglePost: React.FC = () => {
   return (
     <Layout>
       <article>
-        <header className="mb-12">
-          <h1 className="text-4xl lg:text-5xl font-black mb-6 text-gray-900 leading-tight font-serif">{post.title}</h1>
+        <header className="mb-6">
+          <h1 className="text-4xl lg:text-5xl font-black mb-4 text-gray-900 leading-tight font-serif">{post.title}</h1>
           <div className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] flex items-center gap-3">
             <span>{new Date(post.created_at).toLocaleDateString()}</span>
             <span>•</span>
@@ -116,7 +116,7 @@ const SinglePost: React.FC = () => {
                           src={authorInfo.avatar} 
                           alt={authorInfo.name} 
                           className="w-full h-full object-cover" 
-                          onError={(e) => { (e.target as HTMLImageElement).src = 'https://picsum.photos/100/100'; }}
+                          onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/100'; }}
                         />
                     </div>
                     <span className="text-[#1d2327] font-black">{authorInfo.name}</span>
@@ -127,7 +127,13 @@ const SinglePost: React.FC = () => {
           </div>
         </header>
 
-        {post.featured_image && <img src={post.featured_image} className="w-full mb-12 shadow-sm rounded-sm" />}
+        {/* Featured Image Placement */}
+        {post.featured_image && (
+          <div className="mb-8 rounded-sm overflow-hidden shadow-xl border border-gray-100 bg-gray-50">
+            <img src={post.featured_image} className="w-full h-auto max-h-[600px] object-cover" alt={post.title} />
+          </div>
+        )}
+
         <div className="wp-entry-content font-serif" dangerouslySetInnerHTML={{ __html: post.content }} />
 
         <section className="mt-24 border-t border-gray-100 pt-16">
@@ -157,7 +163,7 @@ const SinglePost: React.FC = () => {
             </div>
             <textarea placeholder="Comment *" required className="w-full border border-gray-300 p-4 mb-4 text-sm h-40 focus:border-[#72aee6] outline-none bg-white text-gray-900 font-serif" value={commentText} onChange={e => setCommentText(e.target.value)} />
             <button type="submit" disabled={isSubmitting} className="bg-[#1d2327] text-white px-8 py-3 font-black uppercase text-[10px] tracking-widest rounded-sm hover:bg-black disabled:opacity-50 transition-all active:scale-95 shadow-lg">
-              {isSubmitting ? 'Securing...' : 'Post Comment'}
+              {isSubmitting ? 'Posting...' : 'Post Comment'}
             </button>
           </form>
         </section>

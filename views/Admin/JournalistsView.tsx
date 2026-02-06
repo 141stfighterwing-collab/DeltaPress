@@ -10,7 +10,8 @@ interface Bot {
   name: string;
   title: string;
   niche: string;
-  category: string;
+  category: string; // The text name for prompting
+  category_id?: string; // The actual DB relation
   schedule: string;
   status: 'active' | 'paused';
   last_run: string | null;
@@ -21,7 +22,6 @@ interface Bot {
   avatar_url?: string;
 }
 
-const CATEGORIES = ['Politics', 'Economics', 'Technology', 'Health', 'Business', 'Lifestyle', 'Travel', 'Food', 'General'];
 const ETHNICITIES = ['Arab', 'Asian', 'Latino', 'White', 'Black', 'Ginger'];
 const HAIR_COLORS = ['Blonde', 'Red', 'Black', 'Brunette', 'Blue/Black', 'Bleached', 'Grey'];
 
@@ -52,6 +52,7 @@ const DEFAULT_AVATAR_URLS = {
 const JournalistsView: React.FC = () => {
   const navigate = useNavigate();
   const [bots, setBots] = useState<Bot[]>([]);
+  const [categories, setCategories] = useState<{id: string, name: string}[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDeploying, setIsDeploying] = useState<string | null>(null);
   const [deploymentStep, setDeploymentStep] = useState<string>('');
@@ -65,7 +66,7 @@ const JournalistsView: React.FC = () => {
     name: '',
     title: '',
     niche: '',
-    category: 'Politics',
+    category_id: '',
     schedule: '24h',
     perspective: 0,
     gender: 'female' as 'male' | 'female',
@@ -80,16 +81,19 @@ const JournalistsView: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchBots();
+    fetchData();
   }, []);
 
-  const fetchBots = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('journalists').select('*');
-      if (!error && data) {
-        setBots(data);
-      }
+      const [{ data: botsData }, { data: catsData }] = await Promise.all([
+        supabase.from('journalists').select('*'),
+        supabase.from('categories').select('id, name').order('name')
+      ]);
+      
+      if (botsData) setBots(botsData);
+      if (catsData) setCategories(catsData);
     } catch (err) {} finally { setLoading(false); }
   };
 
@@ -114,7 +118,8 @@ const JournalistsView: React.FC = () => {
     setIsGeneratingAvatar(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-      const prompt = `A professional, realistic studio headshot of a ${formData.ethnicity} ${formData.gender} news journalist with ${formData.hair_color} hair. High fashion cinematic lighting. Specializing in ${formData.category}.`;
+      const catName = categories.find(c => c.id === formData.category_id)?.name || 'General';
+      const prompt = `A professional, realistic studio headshot of a ${formData.ethnicity} ${formData.gender} news journalist with ${formData.hair_color} hair. High fashion cinematic lighting. Specializing in ${catName}.`;
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: { parts: [{ text: prompt }] },
@@ -134,7 +139,7 @@ const JournalistsView: React.FC = () => {
         name: bot.name, 
         title: bot.title || '',
         niche: bot.niche, 
-        category: bot.category,
+        category_id: bot.category_id || '',
         schedule: bot.schedule || '24h', 
         perspective: bot.perspective, 
         gender: bot.gender,
@@ -145,7 +150,7 @@ const JournalistsView: React.FC = () => {
     } else {
       setEditingBot(null);
       setFormData({ 
-        name: '', title: '', niche: '', category: 'Politics', schedule: '24h', 
+        name: '', title: '', niche: '', category_id: categories[0]?.id || '', schedule: '24h', 
         perspective: 0, gender: 'female', ethnicity: 'White', hair_color: 'Brunette', avatar_url: '' 
       });
     }
@@ -156,11 +161,13 @@ const JournalistsView: React.FC = () => {
     if (!formData.name) return;
     setIsSaving(true);
     try {
+      const catName = categories.find(c => c.id === formData.category_id)?.name || 'General';
       const payload: any = {
         name: formData.name, 
         title: formData.title,
         niche: formData.niche,
-        category: formData.category, 
+        category: catName, 
+        category_id: formData.category_id,
         schedule: formData.schedule,
         perspective: formData.perspective, 
         gender: formData.gender, 
@@ -171,7 +178,7 @@ const JournalistsView: React.FC = () => {
       };
       const res = editingBot ? await supabase.from('journalists').update(payload).eq('id', editingBot.id) : await supabase.from('journalists').insert([payload]);
       if (res.error) throw res.error;
-      await fetchBots();
+      await fetchData();
       setShowConfigModal(false);
     } catch (err: any) { alert(err.message); } finally { setIsSaving(false); }
   };
@@ -182,7 +189,6 @@ const JournalistsView: React.FC = () => {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       
-      // 1. Generate Article Text
       const textResponse = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `You are ${bot.name}, a journalist specializing in ${bot.category}. 
@@ -194,13 +200,11 @@ const JournalistsView: React.FC = () => {
       });
       
       let fullText = textResponse.text || '';
-      // Strip markdown code blocks if the model ignored instructions
       fullText = fullText.replace(/^```html\n?|```$/g, '').trim();
 
       const title = fullText.match(/<h1>(.*?)<\/h1>/)?.[1] || `${bot.niche} Update`;
       const content = fullText.replace(/<h1>.*?<\/h1>/, '').trim();
 
-      // 2. Generate Featured Image
       setDeploymentStep('Photographing...');
       let featuredImageUrl = null;
       try {
@@ -214,11 +218,8 @@ const JournalistsView: React.FC = () => {
         if (imgPart?.inlineData) {
             featuredImageUrl = `data:image/png;base64,${imgPart.inlineData.data}`;
         }
-      } catch (e) {
-        console.error("Image generation failed, proceeding without image", e);
-      }
+      } catch (e) {}
 
-      // 3. Save to Database
       setDeploymentStep('Publishing...');
       const { data: { session } } = await supabase.auth.getSession();
       await supabase.from('posts').insert({
@@ -228,13 +229,14 @@ const JournalistsView: React.FC = () => {
         author_id: session?.user?.id, 
         journalist_id: bot.id, 
         type: 'post',
+        category_id: bot.category_id,
         featured_image: featuredImageUrl,
         slug: title.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-') + '-' + Date.now().toString().slice(-4)
       });
       await supabase.from('journalists').update({ last_run: new Date().toISOString() }).eq('id', bot.id);
-      fetchBots();
+      fetchData();
     } catch (err) {
-        console.error("Journalist deployment error:", err);
+        console.error(err);
     } finally { setIsDeploying(null); }
   };
 
@@ -291,24 +293,36 @@ const JournalistsView: React.FC = () => {
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-gray-400">Professional Title</label>
-                    <input type="text" placeholder="e.g. Senior Food Consultant" className="w-full border-2 p-3 font-bold text-sm bg-gray-50 focus:border-blue-500 outline-none" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} />
+                    <input type="text" placeholder="e.g. Senior History Analyst" className="w-full border-2 p-3 font-bold text-sm bg-gray-50 focus:border-blue-500 outline-none" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-gray-400">Beat / Topic</label>
-                    <input type="text" className="w-full border-2 p-3 font-bold text-sm bg-gray-50 focus:border-blue-500 outline-none" value={formData.niche} onChange={e => setFormData({ ...formData, niche: e.target.value })} />
+                    <label className="text-[10px] font-black uppercase text-gray-400">Beat / Specific Topic</label>
+                    <input type="text" placeholder="e.g. 19th Century Labor Movements" className="w-full border-2 p-3 font-bold text-sm bg-gray-50 focus:border-blue-500 outline-none" value={formData.niche} onChange={e => setFormData({ ...formData, niche: e.target.value })} />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-gray-400">Post Frequency</label>
-                    <select className="w-full border-2 p-3 font-bold text-sm bg-gray-50 focus:border-blue-500 outline-none" value={formData.schedule} onChange={e => setFormData({ ...formData, schedule: e.target.value })}>
-                        {FREQUENCIES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
-                    </select>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase text-gray-400">Post Category</label>
+                        <select className="w-full border-2 p-3 font-bold text-sm bg-gray-50 focus:border-blue-500 outline-none" value={formData.category_id} onChange={e => setFormData({ ...formData, category_id: e.target.value })}>
+                            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            {categories.length === 0 && <option value="">Loading...</option>}
+                        </select>
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase text-gray-400">Frequency</label>
+                        <select className="w-full border-2 p-3 font-bold text-sm bg-gray-50 focus:border-blue-500 outline-none" value={formData.schedule} onChange={e => setFormData({ ...formData, schedule: e.target.value })}>
+                            {FREQUENCIES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                        </select>
+                    </div>
                   </div>
                   
                   {/* Perspective Slider */}
                   <div className="space-y-2 pt-2 pb-2">
                     <div className="flex justify-between items-center">
                         <label className="text-[10px] font-black uppercase text-gray-400">Political Perspective</label>
-                        <span className="text-[9px] font-black text-blue-600 uppercase bg-blue-50 px-2 py-0.5 rounded">{SPECTRUM_LABELS[formData.perspective]}</span>
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${formData.perspective < 0 ? 'bg-red-50 text-red-600' : formData.perspective > 0 ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-600'}`}>
+                            {SPECTRUM_LABELS[formData.perspective]}
+                        </span>
                     </div>
                     <input 
                       type="range" min="-3" max="3" step="1"
@@ -335,10 +349,14 @@ const JournalistsView: React.FC = () => {
                   </div>
                 </div>
                 <div className="bg-gray-50 p-6 rounded border flex flex-col items-center gap-6">
-                    <div className="w-40 h-40 rounded-full border-4 border-white shadow-xl overflow-hidden bg-gray-200">
-                        {formData.avatar_url && <img src={formData.avatar_url} className="w-full h-full object-cover" />}
+                    <div className="w-40 h-40 rounded-full border-4 border-white shadow-xl overflow-hidden bg-gray-200 flex items-center justify-center">
+                        {formData.avatar_url ? (
+                            <img src={formData.avatar_url} className="w-full h-full object-cover" />
+                        ) : (
+                            <span className="text-gray-400 text-xs font-black uppercase">No Portrait</span>
+                        )}
                     </div>
-                    <button onClick={generateAIAvatar} disabled={isGeneratingAvatar || !formData.name} className="w-full py-3 bg-white border border-gray-200 rounded text-[10px] font-black uppercase hover:bg-gray-100 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                    <button onClick={generateAIAvatar} disabled={isGeneratingAvatar || !formData.name} className="w-full py-3 bg-white border border-gray-200 rounded text-[10px] font-black uppercase hover:bg-gray-100 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-sm">
                         {isGeneratingAvatar ? 'Synthesizing...' : '✨ Sync Portrait'}
                     </button>
                     <div className="w-full space-y-1">
@@ -348,8 +366,8 @@ const JournalistsView: React.FC = () => {
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-10 pt-6 border-t border-gray-100">
-                <button onClick={() => setShowConfigModal(false)} className="text-gray-400 font-bold uppercase text-[10px]">Cancel</button>
-                <button onClick={handleSaveBot} disabled={isSaving} className="bg-gray-900 text-white px-10 py-3 rounded font-black uppercase text-[10px] shadow-xl hover:bg-black">{isSaving ? 'Saving...' : 'Commit'}</button>
+                <button onClick={() => setShowConfigModal(false)} className="text-gray-400 font-bold uppercase text-[10px] hover:text-gray-600">Cancel</button>
+                <button onClick={handleSaveBot} disabled={isSaving} className="bg-gray-900 text-white px-10 py-3 rounded font-black uppercase text-[10px] shadow-xl hover:bg-black transition-all active:scale-95">{isSaving ? 'Saving...' : 'Commit'}</button>
               </div>
             </div>
           </div>

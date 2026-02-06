@@ -34,7 +34,15 @@ const DiagnosticsView: React.FC = () => {
         -- Ensure Extensions
         CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-        -- Journalists Table
+        -- Categories Table Base
+        CREATE TABLE IF NOT EXISTS categories (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            name TEXT NOT NULL,
+            slug TEXT UNIQUE,
+            created_at TIMESTAMPTZ DEFAULT now()
+        );
+
+        -- Journalists Table Core & Updates
         CREATE TABLE IF NOT EXISTS journalists (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             name TEXT NOT NULL,
@@ -52,12 +60,15 @@ const DiagnosticsView: React.FC = () => {
             created_at TIMESTAMPTZ DEFAULT now()
         );
 
+        -- Add missing category_id to journalists if it doesn't exist
+        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES categories(id) ON DELETE SET NULL;
+
         -- Posts Table Integrity
         ALTER TABLE posts ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES posts(id) ON DELETE SET NULL;
         ALTER TABLE posts ADD COLUMN IF NOT EXISTS menu_order INTEGER DEFAULT 0;
-        ALTER TABLE posts ADD COLUMN IF NOT EXISTS journalist_id UUID;
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS journalist_id UUID REFERENCES journalists(id) ON DELETE SET NULL;
         ALTER TABLE posts ADD COLUMN IF NOT EXISTS featured_image TEXT;
-        ALTER TABLE posts ADD COLUMN IF NOT EXISTS category_id UUID;
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES categories(id) ON DELETE SET NULL;
         ALTER TABLE posts ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'post';
         ALTER TABLE posts ADD COLUMN IF NOT EXISTS slug TEXT;
         ALTER TABLE posts ADD COLUMN IF NOT EXISTS excerpt TEXT;
@@ -77,6 +88,11 @@ const DiagnosticsView: React.FC = () => {
         CREATE POLICY "Allow public read journalists" ON journalists FOR SELECT USING (true);
         DROP POLICY IF EXISTS "Allow authenticated manage journalists" ON journalists;
         CREATE POLICY "Allow authenticated manage journalists" ON journalists FOR ALL USING (auth.role() = 'authenticated');
+        
+        -- Fix RLS for Categories
+        ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "Allow public read categories" ON categories;
+        CREATE POLICY "Allow public read categories" ON categories FOR SELECT USING (true);
       `;
       
       addLog("📡 Executing Database Realignment...");
@@ -84,12 +100,12 @@ const DiagnosticsView: React.FC = () => {
       
       if (error) {
         if (error.code === '42883') {
-          addLog("❌ Error: RPC 'exec_sql' not found. Please contact support to enable raw SQL execution.");
+          addLog("❌ Error: RPC 'exec_sql' not found. You may need to manually run the SQL in Supabase Dashboard.");
         } else {
           addLog(`❌ REPAIR ERROR: ${error.message}`);
         }
       } else {
-        addLog("✅ SUPREME REPAIR SUCCESSFUL: Database schema is now in parity.");
+        addLog("✅ SUPREME REPAIR SUCCESSFUL: Journalists and Categories tables are now synchronized.");
       }
     } catch (err: any) {
       addLog(`❌ CRITICAL FAILURE: ${err.message}`);

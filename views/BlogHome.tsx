@@ -12,7 +12,6 @@ const BlogHome: React.FC = () => {
   useEffect(() => {
     const fetchPosts = async () => {
       try {
-        // Filter by type 'post' to separate blog entries from static pages
         const { data, error } = await supabase
           .from('posts')
           .select('*')
@@ -42,7 +41,7 @@ const BlogHome: React.FC = () => {
           <p className="text-xs not-italic">Start by writing your first masterpiece in the Admin dashboard!</p>
         </div>
       ) : (
-        <div className="divide-y divide-gray-100">
+        <div className="divide-y divide-gray-100 w-full">
           {posts.map(post => (
             <PostCard key={post.id} post={post} />
           ))}

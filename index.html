@@ -18,6 +18,8 @@
             background-color: #f1f1f1;
             color: #111;
             transition: background-color 0.3s ease;
+            margin: 0;
+            padding: 0;
         }
         h1, h2, h3, .serif {
             font-family: 'Libre Baskerville', serif;
@@ -75,10 +77,31 @@
             box-shadow: 0 10px 40px rgba(0,0,0,0.1);
         }
         
+        /* FIX: prevent "boxed" blog layout on home/blog feed */
+        body.home, body.blog {
+            background-color: var(--site-bg-color, #f1f1f1) !important;
+        }
+
+        /* Ensure the main site wrapper never collapses due to injected content */
+        .max-w-7xl {
+            width: 100% !important;
+            max-width: 1280px !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+        }
+
+        /* Prevent rogue .container classes in posts from overriding layout */
+        .wp-entry-content .container {
+            max-width: 100% !important;
+            width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
         /* Dark Mode Overrides */
         .dark-theme {
-            background-color: #0c0c0c !important;
-            color: #eee !important;
+            background-color: #0c0c0c;
+            color: #eee;
         }
         .dark-theme .bg-white { background-color: #141414 !important; }
         .dark-theme .border-gray-200 { border-color: #222 !important; }

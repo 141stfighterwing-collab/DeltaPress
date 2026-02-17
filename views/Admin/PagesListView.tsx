@@ -91,7 +91,7 @@ const PagesListView: React.FC = () => {
             <div className={depth > 0 ? 'ml-1' : ''}>
               <div className="font-black text-gray-900 leading-tight flex items-center gap-3">
                 <span className={depth > 0 ? 'text-gray-600 font-bold' : 'text-lg font-serif'}>{page.title}</span>
-                {page.parent_id && <span className="bg-blue-50 text-[8px] px-1.5 py-0.5 rounded text-blue-500 font-black uppercase tracking-widest">Sub-Menu</span>}
+                {page.parent_id && <span className="bg-blue-50 text-[8px] px-1.5 py-0.5 rounded text-blue-500 font-black uppercase tracking-widest">Sub-Menu Item</span>}
               </div>
               <div className="text-[10px] text-gray-400 font-mono mt-1">/{page.slug}</div>
             </div>
@@ -108,9 +108,17 @@ const PagesListView: React.FC = () => {
           </span>
         </td>
         <td className="px-6 py-4 text-right">
-          <div className="flex justify-end gap-4 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex justify-end gap-4 opacity-0 group-hover:opacity-100 transition-opacity items-center">
             {['admin', 'editor'].includes(role || '') ? (
               <>
+                {depth === 0 && (
+                  <Link 
+                    to={`/admin/new-post?type=page&parent_id=${page.id}`} 
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-black uppercase text-[10px] px-3 py-1.5 rounded border border-gray-200 transition-colors"
+                  >
+                    + Add Sub-page
+                  </Link>
+                )}
                 <Link to={`/admin/edit-post/${page.id}`} className="text-blue-600 font-black uppercase text-[10px] hover:underline">Configure</Link>
                 <button onClick={() => handleDelete(page.id)} className="text-red-500 font-black uppercase text-[10px] hover:underline">Trash</button>
               </>
@@ -132,8 +140,8 @@ const PagesListView: React.FC = () => {
             <h1 className="text-4xl font-black text-gray-900 font-serif leading-none mb-2">Navbar Hierarchy</h1>
             <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.3em] mt-1">Global Site Architecture Management</p>
           </div>
-          <Link to="/admin/new-post?type=page" className="bg-[#0073aa] text-white px-8 py-3 rounded text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all">
-            Add New Tab
+          <Link to="/admin/new-post?type=page" className="bg-[#0073aa] text-white px-8 py-4 rounded text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all">
+            New Parent Page
           </Link>
         </header>
 
@@ -162,14 +170,14 @@ const PagesListView: React.FC = () => {
           </table>
         </div>
         
-        <div className="mt-12 p-8 bg-gray-900 rounded-xl text-white shadow-2xl relative overflow-hidden group">
+        <div className="mt-12 p-10 bg-gray-900 rounded-xl text-white shadow-2xl relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                 <span className="text-9xl font-serif">?</span>
             </div>
-            <h4 className="text-[10px] font-black uppercase tracking-[0.4em] mb-4 text-blue-400">Architecture Tutorial</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-[12px] text-gray-400 leading-relaxed font-bold uppercase tracking-wider">
-                <p>Top-level pages with <span className="text-white">Order 0</span> will appear as primary navbar tabs from left to right.</p>
-                <p>Assign a <span className="text-white">Parent Page</span> to create automated dropdown menus. This is ideal for sections like "About Us" or "Resources".</p>
+            <h4 className="text-[11px] font-black uppercase tracking-[0.4em] mb-6 text-blue-400">Architecture Tutorial</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 text-[13px] text-gray-400 leading-relaxed font-bold uppercase tracking-wider">
+                <p>Use the <span className="text-white">"New Parent Page"</span> button to create top-level navbar tabs. These define your primary site navigation sections.</p>
+                <p>Click <span className="text-white">"+ Add Sub-page"</span> on any row to instantly create a child link. These appear as dropdown items under their respective parent tab.</p>
             </div>
         </div>
       </main>

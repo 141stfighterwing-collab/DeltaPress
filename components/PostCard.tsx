@@ -41,11 +41,17 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
     trackEvent('click', post.slug, { title: post.title });
   };
 
-  const getSafePreview = (html: string) => {
-    if (html.length < 1000 || html.includes('<audio') || html.includes('<video') || html.includes('<iframe')) {
-      return html;
-    }
-    return html.substring(0, 450) + '...';
+  const getSafePreviewText = (html: string) => {
+    const plainText = html
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (plainText.length <= 460) return plainText;
+    return `${plainText.slice(0, 460).trimEnd()}...`;
   };
 
   return (
@@ -91,7 +97,7 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
         {post.excerpt ? (
           <p>{post.excerpt}</p>
         ) : (
-          <div dangerouslySetInnerHTML={{ __html: getSafePreview(post.content) }} />
+          <p>{getSafePreviewText(post.content)}</p>
         )}
       </div>
 

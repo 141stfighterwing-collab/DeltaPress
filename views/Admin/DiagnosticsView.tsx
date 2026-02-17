@@ -34,6 +34,29 @@ const DiagnosticsView: React.FC = () => {
         -- Ensure Extensions
         CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+        -- Site Settings Expansion
+        CREATE TABLE IF NOT EXISTS site_settings (
+            id INTEGER PRIMARY KEY,
+            title TEXT,
+            slogan TEXT,
+            logo_url TEXT,
+            header_image TEXT,
+            header_fit TEXT,
+            header_pos_x INTEGER,
+            header_pos_y INTEGER,
+            theme TEXT DEFAULT 'light',
+            title_color TEXT DEFAULT '#000000',
+            bg_color TEXT DEFAULT '#f1f1f1',
+            text_color TEXT DEFAULT '#111111',
+            header_font TEXT DEFAULT 'serif'
+        );
+
+        -- Add missing appearance columns if they don't exist
+        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS title_color TEXT DEFAULT '#000000';
+        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS bg_color TEXT DEFAULT '#f1f1f1';
+        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS text_color TEXT DEFAULT '#111111';
+        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS header_font TEXT DEFAULT 'serif';
+
         -- Categories Table Base
         CREATE TABLE IF NOT EXISTS categories (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

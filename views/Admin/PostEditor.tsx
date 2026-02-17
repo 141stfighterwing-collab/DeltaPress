@@ -69,6 +69,8 @@ const PostEditor: React.FC = () => {
       const params = new URLSearchParams(location.search);
       if (params.get('type') === 'page') {
         setContentType('page');
+        const queryParentId = params.get('parent_id');
+        if (queryParentId) setParentId(queryParentId);
       }
 
       if (id) {

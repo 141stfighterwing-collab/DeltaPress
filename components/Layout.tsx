@@ -31,7 +31,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     header_fit: 'cover' as 'cover' | 'contain' | 'none' | 'scale-down',
     header_pos_x: 50,
     header_pos_y: 50,
-    theme: 'light'
+    theme: 'light',
+    title_color: '#000000',
+    bg_color: '#f1f1f1',
+    text_color: '#111111',
+    header_font: 'serif'
   });
 
   useEffect(() => {
@@ -71,14 +75,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       const { data: siteSettings } = await supabase.from('site_settings').select('*').eq('id', 1).maybeSingle();
       if (siteSettings) {
         setSettings({
-          title: siteSettings.title || 'Twenty Ten',
+          title: siteSettings.title && siteSettings.title.trim() !== "" ? siteSettings.title : 'Twenty Ten',
           slogan: siteSettings.slogan || 'Just another WordPress theme',
           logo_url: siteSettings.logo_url || '',
           header_image: siteSettings.header_image || 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&q=80&w=1280&h=240',
           header_fit: siteSettings.header_fit || 'cover',
           header_pos_x: siteSettings.header_pos_x ?? 50,
           header_pos_y: siteSettings.header_pos_y ?? 50,
-          theme: siteSettings.theme || 'light'
+          theme: siteSettings.theme || 'light',
+          title_color: siteSettings.title_color || '#000000',
+          bg_color: siteSettings.bg_color || '#f1f1f1',
+          text_color: siteSettings.text_color || '#111111',
+          header_font: siteSettings.header_font || 'serif'
         });
       }
 
@@ -95,8 +103,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }, [location.pathname]);
 
   useEffect(() => {
+    // Synchronize Body Appearance Immediately
     document.body.className = settings.theme === 'dark' ? 'dark-theme' : 'light-theme';
-  }, [settings.theme]);
+    document.body.style.backgroundColor = settings.bg_color;
+    
+    // Set Variables
+    document.documentElement.style.setProperty('--site-bg-color', settings.bg_color);
+    document.documentElement.style.setProperty('--site-text-color', settings.text_color);
+  }, [settings.theme, settings.bg_color, settings.text_color]);
 
   const getNavClass = (path: string) => {
     const isActive = location.pathname === path;
@@ -111,13 +125,21 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       : base + "text-gray-300 hover:text-white hover:bg-[#333]";
   };
 
+  const getHeaderFontClass = () => {
+    switch (settings.header_font) {
+      case 'sans': return 'font-sans';
+      case 'mono': return 'font-mono';
+      default: return 'font-serif';
+    }
+  };
+
   const containerClasses = settings.theme === 'dark'
-    ? "bg-[#141414] border-gray-800"
-    : "bg-white border-gray-200";
+    ? "bg-[#141414] border-gray-800 shadow-[0_35px_100px_rgba(0,0,0,0.6)]"
+    : "bg-white border-gray-200 shadow-2xl";
 
   return (
-    <div className={`min-h-screen font-sans transition-colors duration-500`}>
-      <div className={`max-w-7xl mx-auto shadow-2xl min-h-screen border-x relative transition-colors duration-500 ${containerClasses}`}>
+    <div className="min-h-screen font-sans">
+      <div className={`max-w-7xl mx-auto min-h-screen border-x relative transition-colors duration-500 ${containerClasses}`} style={{ color: settings.text_color }}>
         
         <div className="absolute top-8 right-10 z-20">
           <Link to={isLoggedIn ? "/admin" : "/login"} className="group flex flex-col items-center gap-1.5">
@@ -137,21 +159,25 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {settings.logo_url ? (
                 <div className="mb-3"><img src={settings.logo_url} alt={settings.title} className="max-h-24 w-auto object-contain" /></div>
             ) : (
-                <h1 className="text-5xl font-black leading-none mb-3 font-serif tracking-tighter text-gray-900 dark:text-white">{settings.title}</h1>
+                <h1 
+                  className={`text-6xl font-black leading-none mb-3 ${getHeaderFontClass()} tracking-tighter transition-all duration-300`}
+                  style={{ color: settings.title_color }}
+                >
+                    {settings.title}
+                </h1>
             )}
           </Link>
           <p className="text-sm text-gray-500 italic uppercase tracking-[0.25em] font-black">{settings.slogan}</p>
         </header>
 
-        <nav className={`border-y transition-colors ${settings.theme === 'dark' ? 'bg-black border-gray-800' : 'bg-black border-gray-800'}`} ref={dropdownRef}>
+        <nav className="border-y bg-black border-gray-800 transition-colors" ref={dropdownRef}>
           <div className="flex flex-wrap items-center">
             <Link to="/" className={getNavClass('/')}>Home</Link>
             
-            {/* Restored About Us Dropdown */}
             <div className="relative">
                 <button 
                   onClick={() => setActiveDropdown(activeDropdown === 'about_core' ? null : 'about_core')}
-                  className={`px-8 py-5 inline-block text-[14px] font-black uppercase tracking-widest transition-all ${settings.theme === 'dark' ? 'text-gray-400 hover:text-white hover:bg-[#222]' : 'text-gray-300 hover:text-white hover:bg-[#333]'} ${activeDropdown === 'about_core' ? (settings.theme === 'dark' ? 'bg-[#333] text-white' : 'bg-[#333] text-white') : ''}`}
+                  className={`px-8 py-5 inline-block text-[14px] font-black uppercase tracking-widest transition-all ${settings.theme === 'dark' ? 'text-gray-400 hover:text-white hover:bg-[#222]' : 'text-gray-300 hover:text-white hover:bg-[#333]'} ${activeDropdown === 'about_core' ? 'bg-[#333] text-white' : ''}`}
                 >
                   About Us <span className="ml-1 text-[10px] opacity-40">▾</span>
                 </button>
@@ -177,7 +203,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                         e.preventDefault();
                         setActiveDropdown(activeDropdown === page.id ? null : page.id);
                       }}
-                      className={`h-full px-2 py-5 transition-all flex items-center justify-center border-l border-white/10 ${settings.theme === 'dark' ? 'hover:bg-[#333] text-white' : 'hover:bg-[#333] text-gray-300'}`}
+                      className="h-full px-2 py-5 transition-all flex items-center justify-center border-l border-white/10 hover:bg-[#333] text-gray-300"
                     >
                       <span className="text-[10px]">▾</span>
                     </button>
@@ -213,8 +239,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
 
         <div className="flex flex-col md:flex-row p-8 lg:p-14 gap-16 lg:gap-24">
-          <main className="flex-1 min-w-0">
-            <div className={`w-full ${settings.theme === 'dark' ? 'prose-invert' : ''}`}>
+          <main className="flex-[1_1_0%] w-full min-w-0">
+            <div className="w-full">
               {children}
             </div>
           </main>

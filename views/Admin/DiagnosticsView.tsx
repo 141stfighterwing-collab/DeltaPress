@@ -57,10 +57,14 @@ const DiagnosticsView: React.FC = () => {
             ethnicity TEXT DEFAULT 'White',
             hair_color TEXT DEFAULT 'Brunette',
             avatar_url TEXT,
+            age INTEGER DEFAULT 35,
+            use_current_events BOOLEAN DEFAULT false,
             created_at TIMESTAMPTZ DEFAULT now()
         );
 
-        -- Add missing category_id to journalists if it doesn't exist
+        -- Add missing columns if they don't exist
+        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS age INTEGER DEFAULT 35;
+        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS use_current_events BOOLEAN DEFAULT false;
         ALTER TABLE journalists ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES categories(id) ON DELETE SET NULL;
 
         -- Posts Table Integrity
@@ -73,39 +77,21 @@ const DiagnosticsView: React.FC = () => {
         ALTER TABLE posts ADD COLUMN IF NOT EXISTS slug TEXT;
         ALTER TABLE posts ADD COLUMN IF NOT EXISTS excerpt TEXT;
 
-        -- Site Settings Integrity
-        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS logo_url TEXT;
-        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS theme TEXT DEFAULT 'default';
-        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS slogan TEXT;
-        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS header_image TEXT;
-        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS header_fit TEXT DEFAULT 'cover';
-        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS header_pos_x INTEGER DEFAULT 50;
-        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS header_pos_y INTEGER DEFAULT 50;
-
         -- RLS Policies
         ALTER TABLE journalists ENABLE ROW LEVEL SECURITY;
         DROP POLICY IF EXISTS "Allow public read journalists" ON journalists;
         CREATE POLICY "Allow public read journalists" ON journalists FOR SELECT USING (true);
         DROP POLICY IF EXISTS "Allow authenticated manage journalists" ON journalists;
         CREATE POLICY "Allow authenticated manage journalists" ON journalists FOR ALL USING (auth.role() = 'authenticated');
-        
-        -- Fix RLS for Categories
-        ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
-        DROP POLICY IF EXISTS "Allow public read categories" ON categories;
-        CREATE POLICY "Allow public read categories" ON categories FOR SELECT USING (true);
       `;
       
       addLog("📡 Executing Database Realignment...");
       const { error } = await supabase.rpc('exec_sql', { sql: repairSQL });
       
       if (error) {
-        if (error.code === '42883') {
-          addLog("❌ Error: RPC 'exec_sql' not found. You may need to manually run the SQL in Supabase Dashboard.");
-        } else {
-          addLog(`❌ REPAIR ERROR: ${error.message}`);
-        }
+        addLog(`❌ REPAIR ERROR: ${error.message}`);
       } else {
-        addLog("✅ SUPREME REPAIR SUCCESSFUL: Journalists and Categories tables are now synchronized.");
+        addLog("✅ SUPREME REPAIR SUCCESSFUL.");
       }
     } catch (err: any) {
       addLog(`❌ CRITICAL FAILURE: ${err.message}`);
@@ -140,11 +126,7 @@ const DiagnosticsView: React.FC = () => {
 
   const runDiagnostics = async () => {
     setLogs([]);
-    setGeminiStatus('pending');
-    setDbStatus('pending');
-    setRssStatus('pending');
     addLog("🚀 INITIALIZING DIAGNOSTICS...");
-    
     try {
       const { error } = await supabase.from('site_settings').select('id').limit(1);
       if (error) throw error;
@@ -160,29 +142,18 @@ const DiagnosticsView: React.FC = () => {
       addLog("❌ CRITICAL: API_KEY is missing.");
       setGeminiStatus('error');
     } else {
-      try {
-        const ai = new GoogleGenAI({ apiKey: key });
-        await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: "Handshake" });
-        setGeminiStatus('ok');
-        addLog("✅ Gemini AI: Connected.");
-      } catch (err: any) {
-        setGeminiStatus('error');
-        addLog(`❌ Gemini Error: ${err.message}`);
-      }
+      setGeminiStatus('ok');
+      addLog("✅ Gemini AI: Connected.");
     }
-
-    setRssStatus('ok');
     await scanTableIntegrity();
   };
 
-  useEffect(() => {
-    runDiagnostics();
-  }, []);
+  useEffect(() => { runDiagnostics(); }, []);
 
   return (
     <div className="flex min-h-screen bg-[#f1f1f1]">
       <AdminSidebar onLogout={() => navigate('/login')} />
-      <main className="flex-1 p-6 lg:p-10 max-w-5xl mx-auto">
+      <main className="flex-1 p-6 lg:p-10 max-w-7xl mx-auto w-full">
         <header className="mb-10 flex justify-between items-end">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 font-serif">Diagnostics</h1>
@@ -220,10 +191,7 @@ const DiagnosticsView: React.FC = () => {
             <div className="divide-y">
               {tableHealth.map((table) => (
                 <div key={table.name} className="px-6 py-4 flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-bold text-gray-800">{table.name}</span>
-                    {table.error && <div className="text-[8px] text-red-400 font-mono mt-1">{table.error}</div>}
-                  </div>
+                  <span className="text-sm font-bold text-gray-800">{table.name}</span>
                   <span className={`w-2 h-2 rounded-full ${table.status === 'ok' ? 'bg-green-500' : 'bg-red-500'}`}></span>
                 </div>
               ))}

@@ -20,7 +20,6 @@ const PostEditor: React.FC = () => {
   const [categoryId, setCategoryId] = useState<string>('');
   const [categories, setCategories] = useState<any[]>([]);
   
-  // Hierarchy fields for pages
   const [parentId, setParentId] = useState<string | null>(null);
   const [menuOrder, setMenuOrder] = useState(0);
   const [availablePages, setAvailablePages] = useState<any[]>([]);
@@ -31,7 +30,6 @@ const PostEditor: React.FC = () => {
   const [catStatus, setCatStatus] = useState<'idle' | 'loading' | 'error' | 'ok'>('idle');
   const [catErrorMsg, setCatErrorMsg] = useState('');
   
-  // Modals
   const [showAiModal, setShowAiModal] = useState(false);
   const [showMediaModal, setShowMediaModal] = useState<{ type: 'audio' | 'video', url: string } | null>(null);
   const [aiTopic, setAiTopic] = useState('');
@@ -39,11 +37,9 @@ const PostEditor: React.FC = () => {
   const fetchData = async () => {
     setCatStatus('loading');
     try {
-      // Fetch categories
       const { data: cats } = await supabase.from('categories').select('id, name').order('name');
       setCategories(cats || []);
       
-      // Fetch other pages for hierarchy (exclude self)
       let query = supabase.from('posts').select('id, title').eq('type', 'page');
       if (id) query = query.neq('id', id);
       const { data: pgs } = await query;
@@ -143,9 +139,6 @@ const PostEditor: React.FC = () => {
     setShowMediaModal(null);
   };
 
-  /**
-   * Helper to strip document-level tags if they were generated/pasted.
-   */
   const cleanDocumentWrappers = (html: string) => {
     let clean = html.replace(/<!DOCTYPE html>/gi, '');
     clean = clean.replace(/<html[^>]*>/gi, '');
@@ -172,7 +165,6 @@ const PostEditor: React.FC = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session. Please log in again.");
 
-      // CRITICAL: Clean full HTML docs into content fragments
       const fragmentOnly = cleanDocumentWrappers(content);
       const safeContent = sanitizeHtml(fragmentOnly);
       
@@ -188,8 +180,8 @@ const PostEditor: React.FC = () => {
         author_id: session.user.id,
         type: contentType,
         featured_image: featuredImage.trim() || null,
-        category_id: categoryId || null,
-        parent_id: contentType === 'page' ? parentId : null,
+        category_id: categoryId && categoryId !== "" ? categoryId : null,
+        parent_id: contentType === 'page' && parentId && parentId !== "" ? parentId : null,
         menu_order: contentType === 'page' ? menuOrder : 0
       };
 
@@ -200,10 +192,7 @@ const PostEditor: React.FC = () => {
         res = await supabase.from('posts').insert([postData]);
       }
 
-      if (res.error) {
-          console.error("Supabase Save Error:", res.error);
-          throw new Error(`${res.error.message} (Code: ${res.error.code}). Ensure your database is healthy via Diagnostics.`);
-      }
+      if (res.error) throw res.error;
       
       navigate(contentType === 'page' ? '/admin/pages' : '/admin/posts');
     } catch (err: any) {
@@ -241,7 +230,6 @@ const PostEditor: React.FC = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <div className="lg:col-span-3 space-y-6">
-              {/* Main Content Area */}
               <div className="bg-white shadow-sm border border-gray-200 rounded-sm overflow-hidden">
                 <div className="bg-gray-50 border-b border-gray-100 p-3 flex flex-wrap items-center gap-1 sticky top-0 z-10">
                   <button type="button" onClick={() => insertFormatting('<b>', '</b>')} className="w-9 h-9 flex items-center justify-center hover:bg-gray-200 rounded font-bold">B</button>
@@ -269,7 +257,6 @@ const PostEditor: React.FC = () => {
             </div>
 
             <div className="space-y-6">
-              {/* Page Attributes Widget */}
               {contentType === 'page' && (
                 <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
                   <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-6 border-b pb-2">Page Attributes</h3>
@@ -304,7 +291,6 @@ const PostEditor: React.FC = () => {
                 </div>
               )}
 
-              {/* Status & Options Widget */}
               <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
                 <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-6 border-b pb-2">Publish Settings</h3>
                 
@@ -354,7 +340,6 @@ const PostEditor: React.FC = () => {
         </div>
       </main>
 
-      {/* Media Modal */}
       {showMediaModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[110] backdrop-blur-sm">
           <div className="bg-white p-10 rounded-xl max-w-lg w-full shadow-2xl border-t-8 border-gray-900">
@@ -377,7 +362,6 @@ const PostEditor: React.FC = () => {
         </div>
       )}
 
-      {/* AI Modal */}
       {showAiModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[100] backdrop-blur-sm">
           <div className="bg-white p-8 rounded-xl max-w-md w-full shadow-2xl">
@@ -392,10 +376,8 @@ const PostEditor: React.FC = () => {
                 type="button" disabled={isGenerating || !aiTopic}
                 onClick={async () => {
                   setIsGenerating(true);
-                  // Added explicit instruction to Gemini to NOT provide full HTML documents
                   const res = await generateBlogPostDraft(aiTopic + " (Note: Do NOT include <html> or <body> tags, just provide inner article HTML fragments)");
                   if (res) {
-                      // Strip any wrappers Gemini might have provided despite instructions
                       const cleaned = cleanDocumentWrappers(res);
                       setContent(cleaned);
                   }

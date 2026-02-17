@@ -10,22 +10,26 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Noto+Sans:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --site-width: 1280px;
+        }
         body {
             font-family: 'Helvetica Neue', Arial, Helvetica, 'Nimbus Sans L', sans-serif;
             background-color: #f1f1f1;
             color: #111;
+            transition: background-color 0.3s ease;
         }
         h1, h2, h3, .serif {
             font-family: 'Libre Baskerville', serif;
         }
         .wp-entry-content {
             word-wrap: break-word;
-            line-height: 1.7;
-            font-size: 1.1rem;
+            line-height: 1.85;
+            font-size: 1.2rem;
             color: #1a1a1a;
         }
         .wp-entry-content p {
-            margin-bottom: 1rem;
+            margin-bottom: 1.75rem;
         }
         .wp-entry-content p:last-child {
             margin-bottom: 0;
@@ -34,41 +38,55 @@
             font-weight: 800;
         }
         .wp-entry-content blockquote {
-            border-left: 5px solid #72aee6;
-            padding: 1.25rem 2rem;
+            border-left: 6px solid #72aee6;
+            padding: 2rem 3rem;
             font-style: italic;
             color: #333;
-            margin: 1.5rem 0;
+            margin: 2.5rem 0;
             background: #f8fbfd;
             border-radius: 0 4px 4px 0;
+            font-size: 1.35rem;
         }
         .wp-entry-content audio {
             width: 100%;
-            margin: 1.5rem 0;
+            margin: 2rem 0;
             display: block;
             border-radius: 50px;
             background: #f1f3f4;
-            padding: 4px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            padding: 6px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
         }
         .wp-entry-content video {
             width: 100%;
             height: auto;
-            margin: 1.5rem 0;
+            margin: 2.5rem 0;
             display: block;
-            border-radius: 8px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.12);
+            border-radius: 12px;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.15);
             background: #000;
         }
         .wp-entry-content iframe {
             width: 100%;
             aspect-ratio: 16 / 9;
-            margin: 1.5rem 0;
+            margin: 2rem 0;
             display: block;
             border: none;
-            border-radius: 8px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
         }
+        
+        /* Dark Mode Overrides */
+        .dark-theme {
+            background-color: #0c0c0c !important;
+            color: #eee !important;
+        }
+        .dark-theme .bg-white { background-color: #141414 !important; }
+        .dark-theme .border-gray-200 { border-color: #222 !important; }
+        .dark-theme .text-gray-900 { color: #fff !important; }
+        .dark-theme .text-gray-800 { color: #ddd !important; }
+        .dark-theme .wp-entry-content { color: #ccc !important; }
+        .dark-theme blockquote { background: #1a1a1a !important; color: #fff !important; border-left-color: #444 !important; }
+        
         ::-webkit-scrollbar { width: 10px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #bbb; border-radius: 5px; }
@@ -89,7 +107,7 @@
 }
 </script>
 </head>
-<body>
+<body class="light-theme">
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
 </body>

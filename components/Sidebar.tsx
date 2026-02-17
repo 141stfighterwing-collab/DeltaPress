@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import CategoryIcon from './CategoryIcon';
 
 interface RecentPost {
   id: string;
@@ -141,10 +142,13 @@ const Sidebar: React.FC = () => {
       {/* Categories Widget */}
       <section>
         <h3 className="font-bold border-b border-gray-100 pb-2 mb-4 uppercase tracking-wider text-[11px] text-gray-400">Categories</h3>
-        <ul className="space-y-2">
+        <ul className="space-y-3">
           {categories.map(cat => (
             <li key={cat.id} className="flex justify-between items-center group">
-              <Link to="#" className="text-blue-700 hover:text-blue-900 hover:underline">{cat.name}</Link>
+              <div className="flex items-center gap-3">
+                <CategoryIcon category={cat.name} size={18} color="#3b82f6" className="opacity-70 group-hover:opacity-100 transition-opacity" />
+                <Link to="#" className="text-blue-700 hover:text-blue-900 hover:underline font-medium">{cat.name}</Link>
+              </div>
               <span className="text-[10px] text-gray-300 font-bold group-hover:text-gray-500">({cat.count})</span>
             </li>
           ))}

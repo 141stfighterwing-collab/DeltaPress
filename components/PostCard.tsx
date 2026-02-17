@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Post } from '../types';
 import { supabase } from '../services/supabase';
 import { trackEvent } from '../services/analytics';
+import CategoryIcon from './CategoryIcon';
 
 interface PostCardProps {
   post: Post & { journalist_id?: string };
@@ -67,6 +68,7 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
           </h2>
         </Link>
         <div className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] flex items-center gap-2">
+          <CategoryIcon category={categoryName} size={14} color="#9ca3af" className="opacity-80" />
           <span>{new Date(post.created_at).toLocaleDateString()}</span>
           <span>•</span>
           {authorInfo ? (

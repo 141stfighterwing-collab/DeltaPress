@@ -5,6 +5,7 @@ import Layout from '../components/Layout';
 import { supabase } from '../services/supabase';
 import { trackEvent } from '../services/analytics';
 import { sanitizeHtml, stripAllHtml, isValidEmail, LIMITS } from '../services/security';
+import CategoryIcon from '../components/CategoryIcon';
 
 const SinglePost: React.FC = () => {
   const { slug } = useParams();
@@ -107,6 +108,7 @@ const SinglePost: React.FC = () => {
         <header className="mb-4">
           <h1 className="text-3xl lg:text-5xl font-black mb-2 text-gray-900 leading-tight font-serif">{post.title}</h1>
           <div className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] flex items-center gap-3">
+            <CategoryIcon category={categoryName} size={16} color="#9ca3af" className="opacity-80" />
             <span>{new Date(post.created_at).toLocaleDateString()}</span>
             <span>•</span>
             {authorInfo ? (

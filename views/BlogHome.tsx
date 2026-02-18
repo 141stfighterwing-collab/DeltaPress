@@ -10,6 +10,7 @@ const BlogHome: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchHomeData = async () => {
@@ -39,6 +40,21 @@ const BlogHome: React.FC = () => {
     fetchHomeData();
   }, []);
 
+  const handleCategoryClick = (id: string) => {
+    setSelectedCategoryId(prev => prev === id ? null : id);
+    // Scroll to the feed when a category is selected for better UX
+    const feedElement = document.getElementById('blog-feed-header');
+    if (feedElement) {
+      feedElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const filteredPosts = selectedCategoryId 
+    ? posts.filter(post => post.category_id === selectedCategoryId)
+    : posts;
+
+  const activeCategory = categories.find(c => c.id === selectedCategoryId);
+
   return (
     <Layout>
       {!loading && categories.length > 0 && (
@@ -51,17 +67,26 @@ const BlogHome: React.FC = () => {
             {categories.map((cat) => (
               <div 
                 key={cat.id} 
-                className="group p-6 bg-white border border-gray-100 rounded-lg shadow-sm hover:shadow-md hover:border-blue-200 transition-all flex flex-col items-center text-center cursor-pointer"
+                onClick={() => handleCategoryClick(cat.id)}
+                className={`group p-6 bg-white border rounded-lg shadow-sm transition-all flex flex-col items-center text-center cursor-pointer ${
+                  selectedCategoryId === cat.id 
+                  ? 'border-blue-500 ring-2 ring-blue-50 bg-blue-50/10' 
+                  : 'border-gray-100 hover:shadow-md hover:border-blue-200'
+                }`}
               >
-                <div className="mb-4 p-4 bg-gray-50 rounded-full group-hover:bg-blue-50 transition-colors">
+                <div className={`mb-4 p-4 rounded-full transition-colors ${
+                  selectedCategoryId === cat.id ? 'bg-blue-100' : 'bg-gray-50 group-hover:bg-blue-50'
+                }`}>
                   <CategoryIcon 
                     category={cat.name} 
                     size={48} 
-                    color="#1e293b" 
-                    className="opacity-90 group-hover:scale-110 transition-transform duration-300" 
+                    color={selectedCategoryId === cat.id ? '#2563eb' : '#1e293b'} 
+                    className={`transition-transform duration-300 ${selectedCategoryId === cat.id ? 'scale-110' : 'opacity-90 group-hover:scale-110'}`} 
                   />
                 </div>
-                <span className="text-xs font-black uppercase tracking-widest text-gray-600 group-hover:text-blue-600">
+                <span className={`text-xs font-black uppercase tracking-widest transition-colors ${
+                  selectedCategoryId === cat.id ? 'text-blue-700' : 'text-gray-600 group-hover:text-blue-600'
+                }`}>
                   {cat.name}
                 </span>
               </div>
@@ -72,20 +97,40 @@ const BlogHome: React.FC = () => {
 
       {loading ? (
         <div className="py-20 text-center text-gray-400 italic font-serif animate-pulse">Loading latest thoughts...</div>
-      ) : posts.length === 0 ? (
-        <div className="py-20 text-center text-gray-400 italic font-serif border-2 border-dashed border-gray-200 rounded-lg bg-gray-50/50">
-          <p className="mb-4">No published posts found.</p>
-          <p className="text-xs not-italic">Start by writing your first masterpiece in the Admin dashboard!</p>
-        </div>
       ) : (
         <div className="divide-y divide-gray-100 w-full">
-          <div className="flex items-center gap-4 mb-12">
-            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Latest Dispatches</h3>
-            <div className="flex-1 h-px bg-gray-100"></div>
+          <div id="blog-feed-header" className="flex items-center justify-between mb-12 gap-4">
+            <div className="flex items-center gap-4 flex-1">
+              <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400 whitespace-nowrap">
+                {selectedCategoryId ? `Category: ${activeCategory?.name}` : 'Latest Dispatches'}
+              </h3>
+              <div className="flex-1 h-px bg-gray-100"></div>
+            </div>
+            {selectedCategoryId && (
+              <button 
+                onClick={() => setSelectedCategoryId(null)}
+                className="text-[9px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-2 px-3 py-1 bg-blue-50 rounded border border-blue-100"
+              >
+                Clear Filter <span className="text-lg leading-none">×</span>
+              </button>
+            )}
           </div>
-          {posts.map(post => (
-            <PostCard key={post.id} post={post} />
-          ))}
+
+          {filteredPosts.length === 0 ? (
+            <div className="py-20 text-center text-gray-400 italic font-serif border-2 border-dashed border-gray-200 rounded-lg bg-gray-50/50">
+              <p className="mb-4">No published posts found in this topic.</p>
+              <button 
+                onClick={() => setSelectedCategoryId(null)}
+                className="text-xs font-black uppercase tracking-widest text-blue-600 hover:underline"
+              >
+                Show All Dispatches
+              </button>
+            </div>
+          ) : (
+            filteredPosts.map(post => (
+              <PostCard key={post.id} post={post} />
+            ))
+          )}
         </div>
       )}
     </Layout>

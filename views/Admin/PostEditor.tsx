@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link, useLocation } from 'react-router-dom';
 import { generateBlogPostDraft } from '../../services/gemini';
 import { supabase } from '../../services/supabase';
-import { sanitizeHtml, cleanSlug, LIMITS } from '../../services/security';
+import { sanitizeHtml, cleanSlug, LIMITS, extractYouTubeVideoId } from '../../services/security';
 import AdminSidebar from '../../components/AdminSidebar';
 
 const PostEditor: React.FC = () => {
@@ -115,6 +115,7 @@ const PostEditor: React.FC = () => {
     if (!showMediaModal || !showMediaModal.url) { setShowMediaModal(null); return; }
     let { type, url } = showMediaModal;
 
+    // Fix Dropbox direct links
     if (url.includes('dropbox.com')) {
       url = url.replace(/dl=0$/, 'raw=1').replace(/dl=1$/, 'raw=1');
       if (!url.includes('raw=1')) {
@@ -129,11 +130,11 @@ const PostEditor: React.FC = () => {
         insertFormatting(`<audio controls preload="metadata">\n  <source src="${url}" type="audio/mpeg">\n  Your browser does not support the audio element.\n</audio>\n\n`);
       }
     } else {
-      if (url.includes('youtube.com') || url.includes('youtu.be')) {
-        let videoId = '';
-        if (url.includes('v=')) videoId = url.split('v=')[1].split('&')[0];
-        else videoId = url.split('/').pop() || '';
-        insertFormatting(`<iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>\n\n`);
+      const videoId = extractYouTubeVideoId(url);
+      if (videoId) {
+        // Wrap in video-wrap for responsive behavior and use nocookie domain
+        const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?rel=0`;
+        insertFormatting(`<div class="video-wrap">\n  <iframe src="${embedUrl}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>\n</div>\n\n`);
       } else {
         insertFormatting(`<video controls preload="metadata">\n  <source src="${url}" type="video/mp4">\n  Your browser does not support the video tag.\n</video>\n\n`);
       }

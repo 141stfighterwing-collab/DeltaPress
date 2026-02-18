@@ -4,7 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { supabase } from '../services/supabase';
 import { trackEvent } from '../services/analytics';
-import { sanitizeHtml, stripAllHtml, isValidEmail, LIMITS } from '../services/security';
+import { sanitizeHtml, stripAllHtml, isValidEmail, LIMITS, normalizeYouTubeEmbeds } from '../services/security';
 import CategoryIcon from '../components/CategoryIcon';
 
 const SinglePost: React.FC = () => {
@@ -135,7 +135,7 @@ const SinglePost: React.FC = () => {
           </div>
         )}
 
-        <div className="wp-entry-content font-serif" dangerouslySetInnerHTML={{ __html: post.content }} />
+        <div className="wp-entry-content font-serif" dangerouslySetInnerHTML={{ __html: normalizeYouTubeEmbeds(post.content) }} />
 
         <section className="mt-16 border-t border-gray-100 pt-10">
           <h3 className="text-2xl font-bold font-serif mb-6 text-gray-900">{comments.length} Thoughts on this post</h3>

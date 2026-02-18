@@ -14,13 +14,39 @@ export const LIMITS = {
 };
 
 /**
+ * Robustly extracts a YouTube video ID from various URL formats.
+ */
+export const extractYouTubeVideoId = (url: string): string | null => {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/|live\/)([^#&?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
+};
+
+/**
+ * Normalizes all <iframe> tags in a block of HTML to a canonical, responsive format.
+ * Primarily handles YouTube links to ensure they work reliably.
+ */
+export const normalizeYouTubeEmbeds = (html: string): string => {
+  if (!html) return '';
+  
+  // Find raw iframes and check if they are YouTube. If they are, wrap them and fix the URL.
+  return html.replace(/<iframe\b[^>]*src=(['"])([^'"]+)\1[^>]*><\/iframe>/gim, (fullMatch, _quote, src) => {
+    const videoId = extractYouTubeVideoId(src);
+    if (!videoId) return fullMatch;
+    
+    return `<div class="video-wrap"><iframe src="https://www.youtube-nocookie.com/embed/${videoId}?rel=0" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
+  });
+};
+
+/**
  * Basic HTML Sanitizer to prevent XSS.
  * Removes <script>, <object>, <embed>, and inline event handlers.
  */
 export const sanitizeHtml = (html: string): string => {
   if (!html) return '';
   
-  return html
+  const sanitized = html
     // Remove script tags and their content
     .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
     // Remove inline event handlers (onclick, onmouseover, etc.)
@@ -28,14 +54,23 @@ export const sanitizeHtml = (html: string): string => {
     .replace(/\s+on\w+='[^']*'/g, "")
     // Remove javascript: pseudo-protocol in links
     .replace(/href\s*=\s*(['"])javascript:[^'"]*([\1])/gim, "href=$1#$2")
-    // Remove meta and link tags that could redirect or load malicious styles
+    // Remove potentially dangerous tags unless they are from trusted media providers
     .replace(/<(meta|link|iframe|embed|object)\b[^>]*>/gim, (match) => {
-      // Allow specific safe iframes (YouTube, Spotify) while stripping others
-      if (match.includes('youtube.com/embed') || match.includes('spotify.com/embed') || match.includes('soundcloud.com/player')) {
+      const lower = match.toLowerCase();
+      // Explicitly allow safe iframes with common video/audio patterns
+      if (
+        lower.includes('youtube.com') || 
+        lower.includes('youtube-nocookie.com') ||
+        lower.includes('youtu.be') ||
+        lower.includes('spotify.com') || 
+        lower.includes('soundcloud.com')
+      ) {
         return match;
       }
       return "";
     });
+
+  return normalizeYouTubeEmbeds(sanitized);
 };
 
 /**

@@ -1,8 +1,8 @@
 
 import { supabase } from './supabase';
-import { GoogleGenAI } from "@google/genai";
+import { extractGeminiInlineImageData, extractGeminiText, geminiGenerateContent } from './geminiClient';
 
-const TEXT_MODEL_CANDIDATES = ['gemini-2.5-pro', 'gemini-2.5-flash'];
+const TEXT_MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
 
 const SPECTRUM_LABELS: Record<number, string> = {
   [-3]: 'Far Left (Anarchism)',
@@ -70,8 +70,7 @@ export const checkAndRunDueAgents = async (
     // 3. Start Deployment Sequence
     if (onStepUpdate) onStepUpdate(`Initializing ${dueBot.name}...`, 5);
 
-    const ai = new GoogleGenAI({ apiKey });
-    
+
     // 4. Intelligence Scoping
     if (onStepUpdate) onStepUpdate(`Scouting intelligence for ${dueBot.category}...`, 15);
 
@@ -85,35 +84,19 @@ export const checkAndRunDueAgents = async (
     // 5. Research and Content Generation
     if (onStepUpdate) onStepUpdate(`Investigating & Drafting Article...`, 35);
     
-    let textResponse: Awaited<ReturnType<typeof ai.models.generateContent>> | null = null;
-    let lastTextModelError: unknown = null;
-
-    for (const model of TEXT_MODEL_CANDIDATES) {
-      try {
-        textResponse = await ai.models.generateContent({
-          model,
-          contents: `Write a 750-word investigative article regarding: ${dueBot.niche}. 
+    const textResponse = await geminiGenerateContent(
+      apiKey,
+      {
+        contents: [{ role: 'user', parts: [{ text: `Write a 750-word investigative article regarding: ${dueBot.niche}. 
           Ensure your ${SPECTRUM_LABELS[dueBot.perspective || 0]} perspective is clear but well-reasoned. 
-          Format: Return ONLY valid HTML (<h1>, <h2>, <p>, <blockquote>). No markdown wrappers.`,
-          config: {
-            systemInstruction,
-            tools: dueBot.use_current_events ? [{ googleSearch: {} }] : []
-          }
-        });
-        break;
-      } catch (error) {
-        lastTextModelError = error;
-        console.warn(`Agent Engine: Model ${model} failed, trying fallback...`, error);
-      }
-    }
+          Format: Return ONLY valid HTML (<h1>, <h2>, <p>, <blockquote>). No markdown wrappers.` }] }],
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        tools: dueBot.use_current_events ? [{ googleSearch: {} }] : []
+      },
+      TEXT_MODEL_CANDIDATES
+    );
 
-    if (!textResponse) {
-      throw lastTextModelError instanceof Error
-        ? lastTextModelError
-        : new Error('Failed to generate article content with available Gemini models.');
-    }
-    
-    let fullText = textResponse.text || '';
+    let fullText = extractGeminiText(textResponse);
     fullText = fullText.replace(/^```html\n?|```$/g, '').trim();
     const title = fullText.match(/<h1>(.*?)<\/h1>/)?.[1] || `${dueBot.niche} Update`;
     const content = fullText.replace(/<h1>.*?<\/h1>/, '').trim();
@@ -123,13 +106,12 @@ export const checkAndRunDueAgents = async (
     
     let featuredImageUrl = null;
     try {
-      const imgResponse = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-image',
-          contents: { parts: [{ text: `A professional editorial news photo about: ${title}. High-end journalism aesthetic.` }] },
-          config: { imageConfig: { aspectRatio: "16:9" } }
-      });
-      const imgPart = imgResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-      if (imgPart?.inlineData) featuredImageUrl = `data:image/png;base64,${imgPart.inlineData.data}`;
+      const imgResponse = await geminiGenerateContent(apiKey, {
+        contents: [{ role: 'user', parts: [{ text: `A professional editorial news photo about: ${title}. High-end journalism aesthetic.` }] }],
+        imageConfig: { aspectRatio: '16:9' }
+      }, ['gemini-2.5-flash-image', 'gemini-2.0-flash-preview-image-generation']);
+      const imageData = extractGeminiInlineImageData(imgResponse);
+      if (imageData) featuredImageUrl = `data:image/png;base64,${imageData}`;
     } catch (e) { 
       console.warn("Agent Engine: Image generation failed, proceeding without it."); 
     }

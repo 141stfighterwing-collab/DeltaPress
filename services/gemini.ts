@@ -1,7 +1,7 @@
 
-import { GoogleGenAI } from "@google/genai";
+import { extractGeminiText, geminiGenerateContent } from "./geminiClient";
 
-const MODEL_CANDIDATES = ['gemini-2.5-flash', 'gemini-2.5-pro'];
+const MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
 
 export async function generateBlogPostDraft(topic: string) {
   const apiKey = process.env.API_KEY;
@@ -16,36 +16,20 @@ export async function generateBlogPostDraft(topic: string) {
   console.debug(`Gemini Request starting with key length: ${apiKey.length}`);
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    let response: Awaited<ReturnType<typeof ai.models.generateContent>> | null = null;
-    let lastModelError: unknown = null;
-
-    for (const model of MODEL_CANDIDATES) {
-      try {
-        response = await ai.models.generateContent({
-          model,
-          contents: `Write a high-quality blog post draft about: ${topic}. 
+    const response = await geminiGenerateContent(
+      apiKey,
+      {
+        contents: [{ role: 'user', parts: [{ text: `Write a high-quality blog post draft about: ${topic}. 
           Include a title, engaging paragraphs, and a conclusion. 
-          Format with basic HTML like <h2> and <p>.`,
-        });
-        break;
-      } catch (error) {
-        lastModelError = error;
-        console.warn(`Gemini model ${model} failed, trying fallback...`, error);
-      }
-    }
+          Format with basic HTML like <h2> and <p>.` }] }]
+      },
+      MODEL_CANDIDATES
+    );
 
-    if (!response) {
-      throw lastModelError instanceof Error
-        ? lastModelError
-        : new Error('No Gemini model produced a response.');
-    }
-    
-    if (!response.text) {
-      throw new Error("Received empty response from Gemini API.");
-    }
+    const text = extractGeminiText(response);
+    if (!text) throw new Error('Received empty response from Gemini API.');
 
-    return response.text;
+    return text;
   } catch (error: any) {
     console.error("Gemini SDK Exception:", error);
     

@@ -111,8 +111,14 @@ Create a `.env.local` file in the project root.
 Recommended variables:
 
 ```env
-# Gemini
-API_KEY=your_gemini_api_key
+# Gemini server-side keys (recommended)
+API_KEY=your_primary_gemini_api_key
+Gemini2_API_KEY=your_secondary_gemini_api_key
+KIMI_API_KEY=your_kimi_api_key
+
+# Optional Kimi overrides
+KIMI_MODEL=moonshot-v1-8k
+KIMI_BASE_URL=https://api.moonshot.cn/v1/chat/completions
 
 # Supabase (optional, project includes defaults)
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url

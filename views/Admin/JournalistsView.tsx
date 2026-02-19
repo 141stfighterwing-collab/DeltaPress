@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
 import { checkAndRunDueAgents } from '../../services/agentEngine';
-import { GoogleGenAI, Type } from "@google/genai";
+import { extractGeminiInlineImageData, extractGeminiText, geminiGenerateContent } from "../../services/geminiClient";
 import AdminSidebar from '../../components/AdminSidebar';
 
 interface Bot {
@@ -51,7 +51,7 @@ const DEFAULT_AVATAR_URLS = {
   female: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop'
 };
 
-const RESEARCH_MODEL_CANDIDATES = ['gemini-2.5-flash', 'gemini-2.5-pro'];
+const RESEARCH_MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
 
 const JournalistsView: React.FC = () => {
   const navigate = useNavigate();
@@ -117,47 +117,29 @@ const JournalistsView: React.FC = () => {
     setNewsResults([]);
     try {
       const apiKey = process.env.API_KEY || '';
-      if (!apiKey) throw new Error('Gemini API key missing');
 
-      const ai = new GoogleGenAI({ apiKey });
-      let response: Awaited<ReturnType<typeof ai.models.generateContent>> | null = null;
-      let lastModelError: unknown = null;
-
-      for (const model of RESEARCH_MODEL_CANDIDATES) {
-        try {
-          response = await ai.models.generateContent({
-            model,
-            contents: `Fetch and summarize 5 major news topics or articles regarding: "${newsQuery}".`,
-            config: {
-              tools: [{ googleSearch: {} }],
-              responseMimeType: "application/json",
-              responseSchema: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    title: { type: Type.STRING },
-                    summary: { type: Type.STRING }
-                  },
-                  required: ["title", "summary"]
-                }
-              }
+      const response = await geminiGenerateContent(
+        apiKey,
+        {
+          contents: [{ role: 'user', parts: [{ text: `Fetch and summarize 5 major news topics or articles regarding: "${newsQuery}".` }] }],
+          tools: [{ googleSearch: {} }],
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                title: { type: 'STRING' },
+                summary: { type: 'STRING' }
+              },
+              required: ['title', 'summary']
             }
-          });
-          break;
-        } catch (error) {
-          lastModelError = error;
-          console.warn(`Research model ${model} failed, trying fallback...`, error);
-        }
-      }
+          }
+        },
+        RESEARCH_MODEL_CANDIDATES
+      );
 
-      if (!response) {
-        throw lastModelError instanceof Error
-          ? lastModelError
-          : new Error('Failed to fetch research topics with available models.');
-      }
-
-      const results = JSON.parse(response.text || '[]');
+      const results = JSON.parse(extractGeminiText(response) || '[]');
       setNewsResults(results);
     } catch (err) {
       console.error(err);
@@ -209,16 +191,18 @@ const JournalistsView: React.FC = () => {
     if (!formData.name) return;
     setIsGeneratingAvatar(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const prompt = `Realistic editorial headshot of a ${formData.age}-year-old ${formData.ethnicity} ${formData.gender} news journalist, ${formData.hair_color} hair, professional neutral background, high-end photography.`;
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: { parts: [{ text: prompt }] },
-        config: { imageConfig: { aspectRatio: "1:1" } }
-      });
-      const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-      if (imagePart?.inlineData) {
-        setFormData(prev => ({ ...prev, avatar_url: `data:image/png;base64,${imagePart.inlineData.data}` }));
+      const response = await geminiGenerateContent(
+        process.env.API_KEY || '',
+        {
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          imageConfig: { aspectRatio: '1:1' }
+        },
+        ['gemini-2.5-flash-image', 'gemini-2.0-flash-preview-image-generation']
+      );
+      const imageData = extractGeminiInlineImageData(response);
+      if (imageData) {
+        setFormData(prev => ({ ...prev, avatar_url: `data:image/png;base64,${imageData}` }));
       }
     } catch (err) {} finally { setIsGeneratingAvatar(false); }
   };

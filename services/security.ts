@@ -62,6 +62,7 @@ export const sanitizeHtml = (html: string): string => {
         lower.includes('youtube.com') || 
         lower.includes('youtube-nocookie.com') ||
         lower.includes('youtu.be') ||
+        lower.includes('docs.google.com') ||
         lower.includes('spotify.com') || 
         lower.includes('soundcloud.com')
       ) {

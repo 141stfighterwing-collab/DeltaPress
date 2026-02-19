@@ -2,6 +2,8 @@
 import { supabase } from './supabase';
 import { GoogleGenAI } from "@google/genai";
 
+const TEXT_MODEL_CANDIDATES = ['gemini-2.5-pro', 'gemini-2.5-flash'];
+
 const SPECTRUM_LABELS: Record<number, string> = {
   [-3]: 'Far Left (Anarchism)',
   [-2]: 'Left (Communist)',
@@ -31,7 +33,12 @@ export const checkAndRunDueAgents = async (
   targetBotId?: string
 ) => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) return;
+  if (!apiKey) {
+    const errMsg = 'Gemini API key is missing.';
+    console.error(`Agent Engine Error: ${errMsg}`);
+    if (onStepUpdate) onStepUpdate(`Error: ${errMsg}`, 0);
+    return;
+  }
 
   try {
     // 1. Fetch active journalists
@@ -78,16 +85,33 @@ export const checkAndRunDueAgents = async (
     // 5. Research and Content Generation
     if (onStepUpdate) onStepUpdate(`Investigating & Drafting Article...`, 35);
     
-    const textResponse = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: `Write a 750-word investigative article regarding: ${dueBot.niche}. 
-      Ensure your ${SPECTRUM_LABELS[dueBot.perspective || 0]} perspective is clear but well-reasoned. 
-      Format: Return ONLY valid HTML (<h1>, <h2>, <p>, <blockquote>). No markdown wrappers.`,
-      config: { 
-        systemInstruction,
-        tools: dueBot.use_current_events ? [{ googleSearch: {} }] : [] 
+    let textResponse: Awaited<ReturnType<typeof ai.models.generateContent>> | null = null;
+    let lastTextModelError: unknown = null;
+
+    for (const model of TEXT_MODEL_CANDIDATES) {
+      try {
+        textResponse = await ai.models.generateContent({
+          model,
+          contents: `Write a 750-word investigative article regarding: ${dueBot.niche}. 
+          Ensure your ${SPECTRUM_LABELS[dueBot.perspective || 0]} perspective is clear but well-reasoned. 
+          Format: Return ONLY valid HTML (<h1>, <h2>, <p>, <blockquote>). No markdown wrappers.`,
+          config: {
+            systemInstruction,
+            tools: dueBot.use_current_events ? [{ googleSearch: {} }] : []
+          }
+        });
+        break;
+      } catch (error) {
+        lastTextModelError = error;
+        console.warn(`Agent Engine: Model ${model} failed, trying fallback...`, error);
       }
-    });
+    }
+
+    if (!textResponse) {
+      throw lastTextModelError instanceof Error
+        ? lastTextModelError
+        : new Error('Failed to generate article content with available Gemini models.');
+    }
     
     let fullText = textResponse.text || '';
     fullText = fullText.replace(/^```html\n?|```$/g, '').trim();

@@ -51,6 +51,8 @@ const DEFAULT_AVATAR_URLS = {
   female: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop'
 };
 
+const RESEARCH_MODEL_CANDIDATES = ['gemini-2.5-flash', 'gemini-2.5-pro'];
+
 const JournalistsView: React.FC = () => {
   const navigate = useNavigate();
   const [bots, setBots] = useState<Bot[]>([]);
@@ -114,26 +116,47 @@ const JournalistsView: React.FC = () => {
     setIsSearchingNews(true);
     setNewsResults([]);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Fetch and summarize 5 major news topics or articles regarding: "${newsQuery}".`,
-        config: {
-          tools: [{ googleSearch: {} }],
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                summary: { type: Type.STRING }
-              },
-              required: ["title", "summary"]
+      const apiKey = process.env.API_KEY || '';
+      if (!apiKey) throw new Error('Gemini API key missing');
+
+      const ai = new GoogleGenAI({ apiKey });
+      let response: Awaited<ReturnType<typeof ai.models.generateContent>> | null = null;
+      let lastModelError: unknown = null;
+
+      for (const model of RESEARCH_MODEL_CANDIDATES) {
+        try {
+          response = await ai.models.generateContent({
+            model,
+            contents: `Fetch and summarize 5 major news topics or articles regarding: "${newsQuery}".`,
+            config: {
+              tools: [{ googleSearch: {} }],
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: { type: Type.STRING },
+                    summary: { type: Type.STRING }
+                  },
+                  required: ["title", "summary"]
+                }
+              }
             }
-          }
+          });
+          break;
+        } catch (error) {
+          lastModelError = error;
+          console.warn(`Research model ${model} failed, trying fallback...`, error);
         }
-      });
+      }
+
+      if (!response) {
+        throw lastModelError instanceof Error
+          ? lastModelError
+          : new Error('Failed to fetch research topics with available models.');
+      }
+
       const results = JSON.parse(response.text || '[]');
       setNewsResults(results);
     } catch (err) {

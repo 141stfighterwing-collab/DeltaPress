@@ -26,6 +26,7 @@ export async function geminiGenerateContent(
   }
 
   let lastError: unknown = null;
+  const attemptedFailures: string[] = [];
 
   for (const model of modelCandidates) {
     for (const baseUrl of GEMINI_API_BASES) {
@@ -42,6 +43,7 @@ export async function geminiGenerateContent(
 
         if (!response.ok) {
           const message = await response.text();
+          attemptedFailures.push(`${model}@${baseUrl} -> ${response.status}`);
           throw new Error(`Gemini request failed (${response.status}) on ${baseUrl} using ${model}: ${message}`);
         }
 
@@ -55,9 +57,14 @@ export async function geminiGenerateContent(
     }
   }
 
-  throw lastError instanceof Error
-    ? lastError
-    : new Error('Failed to generate content with available Gemini model and endpoint fallbacks.');
+  if (lastError instanceof Error) {
+    const attemptSummary = attemptedFailures.length > 0
+      ? ` Attempted: ${attemptedFailures.join(', ')}.`
+      : '';
+    throw new Error(`${lastError.message}${attemptSummary}`);
+  }
+
+  throw new Error('Failed to generate content with available Gemini model and endpoint fallbacks.');
 }
 
 export function extractGeminiText(payload: any): string {
@@ -70,4 +77,71 @@ export function extractGeminiText(payload: any): string {
 export function extractGeminiInlineImageData(payload: any): string | null {
   const imagePart = payload?.candidates?.[0]?.content?.parts?.find((part: any) => part?.inlineData?.data);
   return imagePart?.inlineData?.data || null;
+}
+
+
+export type GeminiValidationAttempt = {
+  model: string;
+  baseUrl: string;
+  ok: boolean;
+  status?: number;
+  error?: string;
+};
+
+export async function geminiValidateApiKey(
+  apiKey: string,
+  modelCandidates: string[] = DEFAULT_MODEL_CANDIDATES
+): Promise<{ ok: boolean; attempts: GeminiValidationAttempt[] }> {
+  if (!apiKey) {
+    return {
+      ok: false,
+      attempts: [{ model: 'n/a', baseUrl: 'n/a', ok: false, error: 'Gemini API key is missing.' }]
+    };
+  }
+
+  const attempts: GeminiValidationAttempt[] = [];
+
+  for (const model of modelCandidates) {
+    for (const baseUrl of GEMINI_API_BASES) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(`${baseUrl}/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: 'Return OK' }] }]
+          }),
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          const message = await response.text();
+          attempts.push({
+            model,
+            baseUrl,
+            ok: false,
+            status: response.status,
+            error: message
+          });
+          continue;
+        }
+
+        attempts.push({ model, baseUrl, ok: true, status: response.status });
+        return { ok: true, attempts };
+      } catch (error: any) {
+        attempts.push({
+          model,
+          baseUrl,
+          ok: false,
+          error: error?.message || 'Unknown transport error'
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+  }
+
+  return { ok: false, attempts };
 }

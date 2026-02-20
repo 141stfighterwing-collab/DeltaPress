@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
-import { GoogleGenAI } from "@google/genai";
+import { geminiValidateApiKey } from "../../services/geminiClient";
 import AdminSidebar from '../../components/AdminSidebar';
 
 interface TableHealth {
@@ -24,6 +24,21 @@ const DiagnosticsView: React.FC = () => {
 
   const addLog = (msg: string) => {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+  };
+
+
+  const summarizeGeminiError = (raw?: string) => {
+    if (!raw) return 'No error payload returned.';
+
+    try {
+      const parsed = JSON.parse(raw);
+      const message = parsed?.error?.message || parsed?.message || raw;
+      const status = parsed?.error?.status ? ` status=${parsed.error.status};` : '';
+      const code = typeof parsed?.error?.code !== 'undefined' ? ` code=${parsed.error.code};` : '';
+      return `${code}${status} message=${String(message).replace(/\s+/g, ' ').trim()}`;
+    } catch {
+      return raw.replace(/\s+/g, ' ').trim();
+    }
   };
 
   const runRepair = async () => {
@@ -150,24 +165,51 @@ const DiagnosticsView: React.FC = () => {
   const runDiagnostics = async () => {
     setLogs([]);
     addLog("🚀 INITIALIZING DIAGNOSTICS...");
+
+    let dbHealthy = false;
+    let geminiHealthy = false;
+
     try {
       const { error } = await supabase.from('site_settings').select('id').limit(1);
       if (error) throw error;
       setDbStatus('ok');
+      dbHealthy = true;
       addLog("✅ Supabase Engine: Live.");
     } catch (err: any) {
       setDbStatus('error');
       addLog(`❌ Supabase Error: ${err.message}`);
     }
 
-    const key = process.env.API_KEY;
+    const key = import.meta.env.VITE_API_KEY || process.env.API_KEY || '';
     if (!key) {
-      addLog("❌ CRITICAL: API_KEY is missing.");
+      addLog("❌ Gemini Validation: Missing API key. Checked VITE_API_KEY and API_KEY.");
       setGeminiStatus('error');
     } else {
-      setGeminiStatus('ok');
-      addLog("✅ Gemini AI: Connected.");
+      addLog(`ℹ️ Gemini Validation: API key detected (length=${key.length}). Starting round-robin probe...`);
+      const report = await geminiValidateApiKey(key);
+
+      report.attempts.forEach((attempt, idx) => {
+        if (attempt.ok) {
+          addLog(`✅ Gemini Attempt #${idx + 1}: model=${attempt.model}; endpoint=${attempt.baseUrl}; status=${attempt.status}.`);
+        } else {
+          const details = summarizeGeminiError(attempt.error);
+          addLog(`❌ Gemini Attempt #${idx + 1}: model=${attempt.model}; endpoint=${attempt.baseUrl}; status=${attempt.status || 'transport-error'}; details=${details}`);
+        }
+      });
+
+      if (report.ok) {
+        setGeminiStatus('ok');
+        geminiHealthy = true;
+        addLog("✅ Gemini Validation: Round-robin succeeded.");
+      } else {
+        setGeminiStatus('error');
+        addLog("❌ Gemini Validation: All model/endpoint attempts failed. See detailed attempt logs above.");
+      }
     }
+
+    setRssStatus(dbHealthy && geminiHealthy ? 'ok' : 'error');
+    addLog(dbHealthy && geminiHealthy ? "✅ Overall status: healthy." : "❌ Overall status: degraded (check failed components).");
+
     await scanTableIntegrity();
   };
 
@@ -201,7 +243,7 @@ const DiagnosticsView: React.FC = () => {
             <div className={`mt-2 text-[10px] font-black uppercase tracking-widest ${geminiStatus === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{geminiStatus}</div>
           </div>
           <div className="bg-white p-6 rounded shadow-sm border border-gray-200 text-center">
-            <h3 className="font-bold text-gray-800 text-sm uppercase">Status</h3>
+            <h3 className="font-bold text-gray-800 text-sm uppercase">Overall</h3>
             <div className={`mt-2 text-[10px] font-black uppercase tracking-widest ${rssStatus === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{rssStatus}</div>
           </div>
         </div>

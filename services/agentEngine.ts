@@ -2,7 +2,7 @@
 import { supabase } from './supabase';
 import { extractGeminiInlineImageData, extractGeminiText, geminiGenerateContent } from './geminiClient';
 
-const TEXT_MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+const TEXT_MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
 
 const SPECTRUM_LABELS: Record<number, string> = {
   [-3]: 'Far Left (Anarchism)',

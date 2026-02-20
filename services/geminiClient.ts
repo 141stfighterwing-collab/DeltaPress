@@ -1,6 +1,6 @@
 const GEMINI_PROXY_PATH = '/api/gemini';
 
-const DEFAULT_MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+const DEFAULT_MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
 
 const REQUEST_TIMEOUT_MS = 30000;
 

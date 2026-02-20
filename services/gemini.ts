@@ -1,7 +1,7 @@
 
 import { extractGeminiText, geminiGenerateContent } from "./geminiClient";
 
-const MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+const MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
 
 export async function generateBlogPostDraft(topic: string) {
   const apiKey = process.env.API_KEY || '';

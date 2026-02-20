@@ -33,12 +33,25 @@ let roundRobinCounter = 0;
 
 const timeoutSignal = () => AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 
+function getConfiguredKeys(...keys: Array<string | undefined>) {
+  return Array.from(
+    new Set(
+      keys
+        .map((key) => key?.trim())
+        .filter((key): key is string => Boolean(key))
+    )
+  );
+}
+
 function listProviderTargets(request: GeminiRequestBody): ProviderTarget[] {
-  const geminiKeys = [
+  const geminiKeys = getConfiguredKeys(
     process.env.GEMINI_API_KEY,
+    process.env.GEMINI2_API_KEY,
     process.env.Gemini2_API_KEY,
-    process.env.API_KEY
-  ].filter((key): key is string => Boolean(key && key.trim()));
+    process.env.GEMINI_API_KEY_2,
+    process.env.API_KEY,
+    process.env.VITE_GEMINI_API_KEY
+  );
 
   const kimiKey = process.env.KIMI_API_KEY?.trim();
   const mlKey = process.env.ML_API_KEY?.trim();
@@ -200,6 +213,7 @@ export default async function handler(req: any, res: any) {
     }
 
     let lastError: unknown = null;
+    const failures: string[] = [];
 
     for (const target of targets) {
       try {
@@ -217,10 +231,14 @@ export default async function handler(req: any, res: any) {
         return res.status(200).json(data);
       } catch (error) {
         lastError = error;
+        const reason = error instanceof Error ? error.message : 'unknown failure';
+        failures.push(`${target.provider}: ${reason}`);
       }
     }
 
-    const message = lastError instanceof Error ? lastError.message : 'Provider rotation exhausted.';
+    const message = failures.length > 0
+      ? `All AI providers failed. ${failures.join(' | ')}`
+      : (lastError instanceof Error ? lastError.message : 'Provider rotation exhausted.');
     return res.status(502).json({ error: message });
   } catch (error: any) {
     return res.status(502).json({ error: error?.message || 'Gemini proxy request failed.' });

@@ -51,7 +51,7 @@ const DEFAULT_AVATAR_URLS = {
   female: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop'
 };
 
-const RESEARCH_MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+const RESEARCH_MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
 
 const JournalistsView: React.FC = () => {
   const navigate = useNavigate();

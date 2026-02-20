@@ -1,6 +1,4 @@
 <div align="center">
-<img width="1200" height="475" alt="DeltaPress Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-
 # DeltaPress
 
 **A modern, high-performance publishing platform designed to go beyond traditional WordPress workflows.**
@@ -113,7 +111,8 @@ Recommended variables:
 ```env
 # Gemini server-side keys (recommended)
 API_KEY=your_primary_gemini_api_key
-Gemini2_API_KEY=your_secondary_gemini_api_key
+GEMINI2_API_KEY=your_secondary_gemini_api_key
+# Backward-compatible alt name also supported: Gemini2_API_KEY
 KIMI_API_KEY=your_kimi_api_key
 ML_API_KEY=your_ml_api_key
 

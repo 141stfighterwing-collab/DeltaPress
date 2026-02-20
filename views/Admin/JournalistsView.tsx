@@ -116,7 +116,7 @@ const JournalistsView: React.FC = () => {
     setIsSearchingNews(true);
     setNewsResults([]);
     try {
-      const apiKey = process.env.API_KEY || '';
+      const apiKey = import.meta.env.VITE_API_KEY || process.env.API_KEY || '';
       if (!apiKey) throw new Error('Gemini API key missing');
 
       const response = await geminiGenerateContent(
@@ -194,7 +194,7 @@ const JournalistsView: React.FC = () => {
     try {
       const prompt = `Realistic editorial headshot of a ${formData.age}-year-old ${formData.ethnicity} ${formData.gender} news journalist, ${formData.hair_color} hair, professional neutral background, high-end photography.`;
       const response = await geminiGenerateContent(
-        process.env.API_KEY || '',
+        import.meta.env.VITE_API_KEY || process.env.API_KEY || '',
         {
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           imageConfig: { aspectRatio: '1:1' }

@@ -115,10 +115,13 @@ Recommended variables:
 API_KEY=your_primary_gemini_api_key
 Gemini2_API_KEY=your_secondary_gemini_api_key
 KIMI_API_KEY=your_kimi_api_key
+ML_API_KEY=your_ml_api_key
 
-# Optional Kimi overrides
+# Optional provider overrides
 KIMI_MODEL=moonshot-v1-8k
 KIMI_BASE_URL=https://api.moonshot.cn/v1/chat/completions
+ML_MODEL=gpt-4o-mini
+ML_BASE_URL=https://api.mlapi.ai/v1/chat/completions
 
 # Supabase (optional, project includes defaults)
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url

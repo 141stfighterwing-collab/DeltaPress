@@ -5,6 +5,8 @@ const GEMINI_API_BASES = [
 
 const KIMI_CHAT_COMPLETIONS_URL = process.env.KIMI_BASE_URL || 'https://api.moonshot.cn/v1/chat/completions';
 const KIMI_MODEL = process.env.KIMI_MODEL || 'moonshot-v1-8k';
+const ML_CHAT_COMPLETIONS_URL = process.env.ML_BASE_URL || 'https://api.mlapi.ai/v1/chat/completions';
+const ML_MODEL = process.env.ML_MODEL || 'gpt-4o-mini';
 
 const REQUEST_TIMEOUT_MS = 30000;
 
@@ -24,7 +26,8 @@ type GeminiProxyBody = {
 
 type ProviderTarget =
   | { provider: 'gemini'; apiKey: string }
-  | { provider: 'kimi'; apiKey: string };
+  | { provider: 'kimi'; apiKey: string }
+  | { provider: 'ml'; apiKey: string };
 
 let roundRobinCounter = 0;
 
@@ -38,13 +41,13 @@ function listProviderTargets(request: GeminiRequestBody): ProviderTarget[] {
   ].filter((key): key is string => Boolean(key && key.trim()));
 
   const kimiKey = process.env.KIMI_API_KEY?.trim();
+  const mlKey = process.env.ML_API_KEY?.trim();
 
   const targets: ProviderTarget[] = geminiKeys.map((apiKey) => ({ provider: 'gemini', apiKey }));
 
   const requestHasImage = Boolean(request.imageConfig);
-  if (!requestHasImage && kimiKey) {
-    targets.push({ provider: 'kimi', apiKey: kimiKey });
-  }
+  if (!requestHasImage && kimiKey) targets.push({ provider: 'kimi', apiKey: kimiKey });
+  if (!requestHasImage && mlKey) targets.push({ provider: 'ml', apiKey: mlKey });
 
   if (targets.length <= 1) return targets;
 
@@ -58,7 +61,7 @@ function extractTextFromGeminiRequest(request: GeminiRequestBody): string {
   const rawContents = request.contents as any;
   const contentList = Array.isArray(rawContents) ? rawContents : [rawContents];
 
-  const text = contentList
+  return contentList
     .flatMap((item: any) => {
       if (!item) return [];
       if (typeof item === 'string') return [item];
@@ -67,11 +70,9 @@ function extractTextFromGeminiRequest(request: GeminiRequestBody): string {
     })
     .join('\n')
     .trim();
-
-  return text;
 }
 
-function toKimiMessages(request: GeminiRequestBody) {
+function toOpenAiMessages(request: GeminiRequestBody) {
   const systemText = request.systemInstruction?.parts?.map((part) => part.text).join('\n').trim();
   const userText = extractTextFromGeminiRequest(request);
 
@@ -82,25 +83,14 @@ function toKimiMessages(request: GeminiRequestBody) {
   return messages;
 }
 
-
 function toGeminiApiRequest(request: GeminiRequestBody) {
   const generationConfig: Record<string, unknown> = {};
 
-  if (request.responseMimeType) {
-    generationConfig.responseMimeType = request.responseMimeType;
-  }
+  if (request.responseMimeType) generationConfig.responseMimeType = request.responseMimeType;
+  if (request.responseSchema) generationConfig.responseSchema = request.responseSchema;
+  if (request.imageConfig) generationConfig.imageConfig = request.imageConfig;
 
-  if (request.responseSchema) {
-    generationConfig.responseSchema = request.responseSchema;
-  }
-
-  if (request.imageConfig) {
-    generationConfig.imageConfig = request.imageConfig;
-  }
-
-  const payload: Record<string, unknown> = {
-    contents: request.contents
-  };
+  const payload: Record<string, unknown> = { contents: request.contents };
 
   if (request.systemInstruction) payload.systemInstruction = request.systemInstruction;
   if (request.tools) payload.tools = request.tools;
@@ -108,6 +98,7 @@ function toGeminiApiRequest(request: GeminiRequestBody) {
 
   return payload;
 }
+
 function toGeminiLikeTextResponse(text: string) {
   return {
     candidates: [
@@ -150,30 +141,42 @@ async function callGeminiWithKey(apiKey: string, request: GeminiRequestBody, mod
     : new Error('Gemini request failed for all model/endpoint fallbacks.');
 }
 
-async function callKimi(apiKey: string, request: GeminiRequestBody) {
-  const response = await fetch(KIMI_CHAT_COMPLETIONS_URL, {
+async function callOpenAiCompatible(
+  providerName: 'Kimi' | 'ML',
+  apiUrl: string,
+  apiKey: string,
+  model: string,
+  request: GeminiRequestBody
+) {
+  const body: Record<string, unknown> = {
+    model,
+    messages: toOpenAiMessages(request),
+    temperature: 0.7
+  };
+
+  if (request.responseMimeType === 'application/json') {
+    body.response_format = { type: 'json_object' };
+  }
+
+  const response = await fetch(apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`
     },
-    body: JSON.stringify({
-      model: KIMI_MODEL,
-      messages: toKimiMessages(request),
-      temperature: 0.7
-    }),
+    body: JSON.stringify(body),
     signal: timeoutSignal()
   });
 
   if (!response.ok) {
     const message = await response.text();
-    throw new Error(`Kimi request failed (${response.status}): ${message}`);
+    throw new Error(`${providerName} request failed (${response.status}): ${message}`);
   }
 
   const data = await response.json();
   const text = data?.choices?.[0]?.message?.content;
   if (!text || typeof text !== 'string') {
-    throw new Error('Kimi response did not include text output.');
+    throw new Error(`${providerName} response did not include text output.`);
   }
 
   return toGeminiLikeTextResponse(text);
@@ -193,7 +196,7 @@ export default async function handler(req: any, res: any) {
 
     const targets = listProviderTargets(body.request);
     if (targets.length === 0) {
-      return res.status(500).json({ error: 'No AI provider keys are configured (Gemini or Kimi).' });
+      return res.status(500).json({ error: 'No AI provider keys are configured (Gemini/Kimi/ML).' });
     }
 
     let lastError: unknown = null;
@@ -205,7 +208,12 @@ export default async function handler(req: any, res: any) {
           return res.status(200).json(data);
         }
 
-        const data = await callKimi(target.apiKey, body.request);
+        if (target.provider === 'kimi') {
+          const data = await callOpenAiCompatible('Kimi', KIMI_CHAT_COMPLETIONS_URL, target.apiKey, KIMI_MODEL, body.request);
+          return res.status(200).json(data);
+        }
+
+        const data = await callOpenAiCompatible('ML', ML_CHAT_COMPLETIONS_URL, target.apiKey, ML_MODEL, body.request);
         return res.status(200).json(data);
       } catch (error) {
         lastError = error;

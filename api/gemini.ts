@@ -3,9 +3,21 @@ const GEMINI_API_BASES = [
   'https://generativelanguage.googleapis.com/v1beta'
 ];
 
-const KIMI_CHAT_COMPLETIONS_URL = process.env.KIMI_BASE_URL || 'https://api.moonshot.cn/v1/chat/completions';
+const KIMI_BASE_URLS = [
+  process.env.KIMI_BASE_URL,
+  process.env.KIMI_BASE_URL_2,
+  'https://api.moonshot.ai/v1/chat/completions',
+  'https://api.moonshot.cn/v1/chat/completions'
+].filter((url): url is string => Boolean(url && url.trim()));
+
+const ML_BASE_URLS = [
+  process.env.ML_BASE_URL,
+  process.env.ML_BASE_URL_2,
+  'https://api.aimlapi.com/v1/chat/completions',
+  'https://api.mlapi.ai/v1/chat/completions'
+].filter((url): url is string => Boolean(url && url.trim()));
+
 const KIMI_MODEL = process.env.KIMI_MODEL || 'moonshot-v1-8k';
-const ML_CHAT_COMPLETIONS_URL = process.env.ML_BASE_URL || 'https://api.mlapi.ai/v1/chat/completions';
 const ML_MODEL = process.env.ML_MODEL || 'gpt-4o-mini';
 
 const REQUEST_TIMEOUT_MS = 30000;
@@ -53,14 +65,26 @@ function listProviderTargets(request: GeminiRequestBody): ProviderTarget[] {
     process.env.VITE_GEMINI_API_KEY
   );
 
-  const kimiKey = process.env.KIMI_API_KEY?.trim();
-  const mlKey = process.env.ML_API_KEY?.trim();
+  const kimiKeys = getConfiguredKeys(
+    process.env.KIMI_API_KEY,
+    process.env.KIMI_API_KEY_2,
+    process.env.KIMI2_API_KEY
+  );
+
+  const mlKeys = getConfiguredKeys(
+    process.env.ML_API_KEY,
+    process.env.ML_API_KEY_2,
+    process.env.ML2_API_KEY,
+    process.env.AIML_API_KEY
+  );
 
   const targets: ProviderTarget[] = geminiKeys.map((apiKey) => ({ provider: 'gemini', apiKey }));
 
   const requestHasImage = Boolean(request.imageConfig);
-  if (!requestHasImage && kimiKey) targets.push({ provider: 'kimi', apiKey: kimiKey });
-  if (!requestHasImage && mlKey) targets.push({ provider: 'ml', apiKey: mlKey });
+  if (!requestHasImage) {
+    targets.push(...kimiKeys.map((apiKey) => ({ provider: 'kimi' as const, apiKey })));
+    targets.push(...mlKeys.map((apiKey) => ({ provider: 'ml' as const, apiKey })));
+  }
 
   if (targets.length <= 1) return targets;
 
@@ -156,43 +180,55 @@ async function callGeminiWithKey(apiKey: string, request: GeminiRequestBody, mod
 
 async function callOpenAiCompatible(
   providerName: 'Kimi' | 'ML',
-  apiUrl: string,
+  apiUrls: string[],
   apiKey: string,
   model: string,
   request: GeminiRequestBody
 ) {
-  const body: Record<string, unknown> = {
-    model,
-    messages: toOpenAiMessages(request),
-    temperature: 0.7
-  };
+  let lastError: unknown = null;
 
-  if (request.responseMimeType === 'application/json') {
-    body.response_format = { type: 'json_object' };
+  for (const apiUrl of apiUrls) {
+    try {
+      const body: Record<string, unknown> = {
+        model,
+        messages: toOpenAiMessages(request),
+        temperature: 0.7
+      };
+
+      if (request.responseMimeType === 'application/json') {
+        body.response_format = { type: 'json_object' };
+      }
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(body),
+        signal: timeoutSignal()
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(`${providerName} request failed (${response.status}) at ${apiUrl}: ${message}`);
+      }
+
+      const data = await response.json();
+      const text = data?.choices?.[0]?.message?.content;
+      if (!text || typeof text !== 'string') {
+        throw new Error(`${providerName} response did not include text output.`);
+      }
+
+      return toGeminiLikeTextResponse(text);
+    } catch (error) {
+      lastError = error;
+    }
   }
 
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify(body),
-    signal: timeoutSignal()
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`${providerName} request failed (${response.status}): ${message}`);
-  }
-
-  const data = await response.json();
-  const text = data?.choices?.[0]?.message?.content;
-  if (!text || typeof text !== 'string') {
-    throw new Error(`${providerName} response did not include text output.`);
-  }
-
-  return toGeminiLikeTextResponse(text);
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`${providerName} failed for all configured endpoints.`);
 }
 
 export default async function handler(req: any, res: any) {
@@ -223,11 +259,11 @@ export default async function handler(req: any, res: any) {
         }
 
         if (target.provider === 'kimi') {
-          const data = await callOpenAiCompatible('Kimi', KIMI_CHAT_COMPLETIONS_URL, target.apiKey, KIMI_MODEL, body.request);
+          const data = await callOpenAiCompatible('Kimi', KIMI_BASE_URLS, target.apiKey, KIMI_MODEL, body.request);
           return res.status(200).json(data);
         }
 
-        const data = await callOpenAiCompatible('ML', ML_CHAT_COMPLETIONS_URL, target.apiKey, ML_MODEL, body.request);
+        const data = await callOpenAiCompatible('ML', ML_BASE_URLS, target.apiKey, ML_MODEL, body.request);
         return res.status(200).json(data);
       } catch (error) {
         lastError = error;

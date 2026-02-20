@@ -109,18 +109,26 @@ Create a `.env.local` file in the project root.
 Recommended variables:
 
 ```env
-# Gemini server-side keys (recommended)
+# Gemini keys (round-robin)
 API_KEY=your_primary_gemini_api_key
+GEMINI_API_KEY=your_primary_gemini_api_key
 GEMINI2_API_KEY=your_secondary_gemini_api_key
+GEMINI_API_KEY_2=your_secondary_gemini_api_key
 # Backward-compatible alt name also supported: Gemini2_API_KEY
-KIMI_API_KEY=your_kimi_api_key
-ML_API_KEY=your_ml_api_key
 
-# Optional provider overrides
+# Kimi keys (round-robin)
+KIMI_API_KEY=your_kimi_api_key
+KIMI_API_KEY_2=your_backup_kimi_api_key
 KIMI_MODEL=moonshot-v1-8k
-KIMI_BASE_URL=https://api.moonshot.cn/v1/chat/completions
+KIMI_BASE_URL=https://api.moonshot.ai/v1/chat/completions
+KIMI_BASE_URL_2=https://api.moonshot.cn/v1/chat/completions
+
+# ML keys (round-robin)
+ML_API_KEY=your_ml_api_key
+ML_API_KEY_2=your_backup_ml_api_key
 ML_MODEL=gpt-4o-mini
-ML_BASE_URL=https://api.mlapi.ai/v1/chat/completions
+ML_BASE_URL=https://api.aimlapi.com/v1/chat/completions
+ML_BASE_URL_2=https://api.mlapi.ai/v1/chat/completions
 
 # Supabase (optional, project includes defaults)
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
@@ -150,6 +158,7 @@ npm run preview
 ## Deployment Notes
 
 - Set all environment variables in your hosting provider before deployment.
+- AI proxy now rotates across Gemini, Kimi, and ML keys/endpoints; configure backup `_2` keys to avoid single-key exhaustion.
 - For production reliability, use your own Supabase instance/keys instead of defaults.
 - If Gemini requests fail in-browser, validate network/CSP/ad-block settings.
 

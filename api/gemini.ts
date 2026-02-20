@@ -82,6 +82,32 @@ function toKimiMessages(request: GeminiRequestBody) {
   return messages;
 }
 
+
+function toGeminiApiRequest(request: GeminiRequestBody) {
+  const generationConfig: Record<string, unknown> = {};
+
+  if (request.responseMimeType) {
+    generationConfig.responseMimeType = request.responseMimeType;
+  }
+
+  if (request.responseSchema) {
+    generationConfig.responseSchema = request.responseSchema;
+  }
+
+  if (request.imageConfig) {
+    generationConfig.imageConfig = request.imageConfig;
+  }
+
+  const payload: Record<string, unknown> = {
+    contents: request.contents
+  };
+
+  if (request.systemInstruction) payload.systemInstruction = request.systemInstruction;
+  if (request.tools) payload.tools = request.tools;
+  if (Object.keys(generationConfig).length > 0) payload.generationConfig = generationConfig;
+
+  return payload;
+}
 function toGeminiLikeTextResponse(text: string) {
   return {
     candidates: [
@@ -103,7 +129,7 @@ async function callGeminiWithKey(apiKey: string, request: GeminiRequestBody, mod
         const response = await fetch(`${baseUrl}/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(request),
+          body: JSON.stringify(toGeminiApiRequest(request)),
           signal: timeoutSignal()
         });
 

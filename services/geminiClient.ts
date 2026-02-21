@@ -6,6 +6,7 @@ const GEMINI_API_BASES = [
 const DEFAULT_MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
 
 const REQUEST_TIMEOUT_MS = 30000;
+const GEMINI_PROXY_ENDPOINT = '/api/gemini';
 
 type GeminiRequestBody = {
   contents: any;
@@ -16,6 +17,21 @@ type GeminiRequestBody = {
   imageConfig?: unknown;
 };
 
+async function postToGeminiProxy(payload: Record<string, unknown>) {
+  const response = await fetch(GEMINI_PROXY_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `Gemini proxy request failed with status ${response.status}`);
+  }
+
+  return response.json();
+}
+
 export async function geminiGenerateContent(
   apiKey: string,
   body: GeminiRequestBody,
@@ -23,6 +39,22 @@ export async function geminiGenerateContent(
 ) {
   if (!apiKey) {
     throw new Error('Gemini API key is missing.');
+  }
+
+  try {
+    const proxyResult = await postToGeminiProxy({
+      operation: 'generate',
+      body,
+      modelCandidates
+    });
+
+    if (proxyResult?.ok && proxyResult?.payload) {
+      return proxyResult.payload;
+    }
+
+    throw new Error(proxyResult?.error || 'Gemini proxy returned an invalid payload.');
+  } catch (proxyError) {
+    console.warn('Gemini proxy failed; falling back to direct browser request.', proxyError);
   }
 
   let lastError: unknown = null;
@@ -97,6 +129,24 @@ export async function geminiValidateApiKey(
       ok: false,
       attempts: [{ model: 'n/a', baseUrl: 'n/a', ok: false, error: 'Gemini API key is missing.' }]
     };
+  }
+
+  try {
+    const proxyResult = await postToGeminiProxy({
+      operation: 'validate',
+      apiKey,
+      modelCandidates
+    });
+
+    if (proxyResult?.ok && Array.isArray(proxyResult?.attempts)) {
+      return { ok: true, attempts: proxyResult.attempts };
+    }
+
+    if (Array.isArray(proxyResult?.attempts)) {
+      return { ok: false, attempts: proxyResult.attempts };
+    }
+  } catch (proxyError: any) {
+    console.warn('Gemini proxy validation failed; falling back to direct browser validation.', proxyError?.message || proxyError);
   }
 
   const attempts: GeminiValidationAttempt[] = [];

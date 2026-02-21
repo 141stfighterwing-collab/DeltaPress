@@ -245,7 +245,9 @@ const DiagnosticsView: React.FC = () => {
 
     const geminiKeys = [
       { keyName: 'API_KEY', value: safeEnv('API_KEY') },
+      { keyName: 'GEMINI_API_KEY', value: safeEnv('GEMINI_API_KEY') },
       { keyName: 'VITE_GEMINI_API_KEY', value: safeEnv('VITE_GEMINI_API_KEY') },
+      { keyName: 'GEMINI2_API_KEY', value: safeEnv('GEMINI2_API_KEY') },
       { keyName: 'Gemini2_API_KEY', value: safeEnv('Gemini2_API_KEY') }
     ];
     const kimiKey = { keyName: 'KIMI_API_KEY', value: safeEnv('KIMI_API_KEY') };
@@ -288,7 +290,7 @@ const DiagnosticsView: React.FC = () => {
       });
     }
 
-    const activeGeminiKeys = geminiKeys.filter(k => !!k.value);
+    const activeGeminiKeys = geminiKeys.filter((k, idx, arr) => !!k.value && arr.findIndex(other => other.value === k.value) === idx);
     if (activeGeminiKeys.length > 1) {
       addLog(`🔁 Gemini Round-Robin Test: cycling ${activeGeminiKeys.length} configured keys...`);
       for (let i = 0; i < activeGeminiKeys.length; i++) {

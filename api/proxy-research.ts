@@ -1,17 +1,24 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 
-dotenv.config();
+export default async function handler(req: any, res: any) {
+    // Enable CORS
+    res.setHeader('Access-Control-Allow-Credentials', true);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader(
+        'Access-Control-Allow-Headers',
+        'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+    );
 
-const app = express();
-const PORT = 3001;
+    if (req.method === 'OPTIONS') {
+        res.status(200).end();
+        return;
+    }
 
-app.use(cors());
-app.use(express.json());
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method not allowed' });
+    }
 
-app.post('/api/proxy-research', async (req, res) => {
     const { provider, query, model, endpoint } = req.body;
 
     console.log(`[Proxy] Request for provider: ${provider}, model: ${model}, endpoint: ${endpoint}`);
@@ -27,8 +34,7 @@ app.post('/api/proxy-research', async (req, res) => {
             console.log(`[Proxy] Using Gemini model: ${model || 'gemini-2.0-flash-exp'}`);
 
             const ai = new GoogleGenAI({ apiKey });
-            // Using the model ID directly
-            // Note: The structure might vary based on the SDK version, this matches the user's service file usage
+
             const response = await ai.models.generateContent({
                 model: model || 'gemini-2.0-flash-exp',
                 contents: `Fetch and summarize 5 major news topics or articles regarding: "${query}". Return as a JSON array of objects with "title" and "summary" fields.`,
@@ -38,7 +44,6 @@ app.post('/api/proxy-research', async (req, res) => {
                 }
             });
 
-            // The SDK returns text directly via a getter in the latest version
             const text = response.text || '[]';
 
             res.json({
@@ -111,8 +116,4 @@ app.post('/api/proxy-research', async (req, res) => {
         console.error('[Proxy] Internal Server Error:', error.message);
         res.status(500).json({ error: error.message });
     }
-});
-
-app.listen(PORT, () => {
-    console.log(`Proxy server running on http://localhost:${PORT}`);
-});
+}

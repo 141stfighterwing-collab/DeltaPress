@@ -9,9 +9,9 @@ export interface ResearchResult {
 
 const PROVIDERS = [
   { id: 'GEMINI', name: 'Google Gemini' },
-  { id: 'KIMI', name: 'Moonshot Kimi' },
   { id: 'ZAI', name: 'Zhipu AI' },
-  { id: 'ML', name: 'AI/ML API' }
+  { id: 'ML', name: 'AI/ML API' },
+  { id: 'KIMI', name: 'Moonshot Kimi' }
 ];
 
 let rotationIndex = 0;
@@ -43,7 +43,7 @@ export async function performResearch(query: string): Promise<ResearchResult[]> 
           query, 
           'https://open.bigmodel.cn/api/paas/v4/chat/completions', 
           process.env.ZAI_API_KEY || '', 
-          'glm-4',
+          'glm-4-flash',
           'Zhipu AI'
         );
         break;
@@ -88,49 +88,38 @@ async function researchWithGemini(query: string): Promise<ResearchResult[]> {
     throw new Error("Gemini API Key missing");
   }
 
-  console.log("[Research Service] 📡 Requesting Gemini (gemini-3-flash-preview) with Google Search...");
-
-  try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Fetch and summarize 5 major news topics or articles regarding: "${query}". Return as a JSON array of objects with "title" and "summary" fields.`,
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json"
-      }
-    });
-
-    const data = JSON.parse(response.text || '[]');
-    return data.map((item: any) => ({
-      title: item.title || 'Untitled Research',
-      summary: item.summary || 'No summary provided.',
-      source: 'Google Search via Gemini'
-    }));
-  } catch (e: any) {
-    console.error("[Research Service] Gemini Search failed, attempting basic generation fallback...", e.message);
-    
-    // Fallback to basic generation without tools if search fails (common in some restricted environments)
+  // Try different models in order of stability
+  const models = ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-3-flash-preview'];
+  
+  for (const model of models) {
+    console.log(`[Research Service] 📡 Requesting Gemini (${model})...`);
     try {
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Provide a summary of 5 current news topics regarding: "${query}". Return as a JSON array of objects with "title" and "summary" fields.`,
+        model: model,
+        contents: `Fetch and summarize 5 major news topics or articles regarding: "${query}". Return as a JSON array of objects with "title" and "summary" fields.`,
         config: {
+          // Only use search tool for the first model attempt
+          tools: model === models[0] ? [{ googleSearch: {} }] : [],
           responseMimeType: "application/json"
         }
       });
+
       const data = JSON.parse(response.text || '[]');
       return data.map((item: any) => ({
         title: item.title || 'Untitled Research',
         summary: item.summary || 'No summary provided.',
-        source: 'Gemini (Basic Fallback)'
+        source: `Google Search via Gemini (${model})`
       }));
-    } catch (fallbackErr: any) {
-      console.error("[Research Service] Gemini basic fallback also failed:", fallbackErr.message);
-      throw fallbackErr;
+    } catch (e: any) {
+      console.warn(`[Research Service] Gemini (${model}) failed:`, e.message);
+      // Continue to next model
     }
   }
+
+  // Final Fallback: If all AI attempts failed, we throw an error instead of using mock data
+  console.error("[Research Service] 💀 All research providers failed. No data available.");
+  throw new Error("Research failed across all providers. Check API keys and network status.");
 }
 
 async function researchWithOpenAICompatible(
@@ -146,40 +135,33 @@ async function researchWithOpenAICompatible(
     throw new Error(`${providerName} API Key invalid`);
   }
 
-  console.log(`[Research Service] 📡 Requesting ${providerName} (${model}) at ${endpoint}...`);
+  console.log(`[Research Service] 📡 Requesting ${providerName} (${model}) via Server Proxy...`);
 
-  const response = await fetch(endpoint, {
+  // Use the server-side proxy to avoid CORS and browser-level protocol errors
+  const response = await fetch('/api/proxy-research', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: model,
-      messages: [
-        { 
-          role: 'system', 
-          content: 'You are a research assistant. Provide a list of 5 current news topics or facts about the requested subject. Return ONLY a JSON array of objects with "title" and "summary" fields. No markdown wrappers.' 
-        },
-        { 
-          role: 'user', 
-          content: `Research: ${query}` 
-        }
-      ],
-      temperature: 0.3
+      endpoint,
+      apiKey,
+      model,
+      query,
+      providerName
     })
   });
 
   if (!response.ok) {
     const errText = await response.text();
-    console.error(`[Research Service] ${providerName} HTTP Error ${response.status}: ${errText}`);
-    throw new Error(`${providerName} API error: ${response.status} ${errText}`);
+    console.error(`[Research Service] Proxy Error for ${providerName}: ${response.status} ${errText}`);
+    throw new Error(`${providerName} Proxy error: ${response.status} ${errText}`);
   }
 
   const data = await response.json();
   let content = data.choices?.[0]?.message?.content || '[]';
   
-  console.log(`[Research Service] 📥 Raw response from ${providerName} received.`);
+  console.log(`[Research Service] 📥 Response from ${providerName} (via proxy) received.`);
 
   // Clean up potential markdown wrappers
   content = content.replace(/^```json\n?|```$/g, '').trim();

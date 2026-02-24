@@ -17,68 +17,68 @@ const PROVIDERS = [
 let rotationIndex = 0;
 
 export async function performResearch(query: string): Promise<ResearchResult[]> {
-  const provider = PROVIDERS[rotationIndex % PROVIDERS.length];
+  const startIndex = rotationIndex % PROVIDERS.length;
   rotationIndex++;
 
-  console.log(`[Research Service] 🔍 Initiating research with provider: ${provider.name}`);
-  console.log(`[Research Service] 📝 Query: "${query}"`);
+  // Create a list of providers to try, starting from the rotated index
+  const orderedProviders = [
+    ...PROVIDERS.slice(startIndex),
+    ...PROVIDERS.slice(0, startIndex)
+  ];
 
-  try {
-    let results: ResearchResult[] = [];
-    switch (provider.id) {
-      case 'GEMINI':
-        results = await researchWithGemini(query);
-        break;
-      case 'KIMI':
-        results = await researchWithOpenAICompatible(
-          query, 
-          'https://api.moonshot.cn/v1/chat/completions', 
-          process.env.KIMI_API_KEY || '', 
-          'moonshot-v1-8k',
-          'Moonshot Kimi'
-        );
-        break;
-      case 'ZAI':
-        results = await researchWithOpenAICompatible(
-          query, 
-          'https://open.bigmodel.cn/api/paas/v4/chat/completions', 
-          process.env.ZAI_API_KEY || '', 
-          'glm-4-flash',
-          'Zhipu AI'
-        );
-        break;
-      case 'ML':
-        results = await researchWithOpenAICompatible(
-          query, 
-          'https://api.aimlapi.com/chat/completions', 
-          process.env.ML_API_KEY || '', 
-          'gpt-4o',
-          'AI/ML API'
-        );
-        break;
-      default:
-        results = await researchWithGemini(query);
-    }
-    
-    console.log(`[Research Service] ✅ ${provider.name} returned ${results.length} results.`);
-    return results;
-  } catch (error: any) {
-    console.error(`[Research Service] ❌ Error with ${provider.name}:`, error.message || error);
-    
-    // Fallback to Gemini if one fails
-    if (provider.id !== 'GEMINI') {
-      console.warn(`[Research Service] 🔄 Falling back to Gemini due to ${provider.name} failure...`);
-      try {
-        const fallbackResults = await researchWithGemini(query);
-        console.log(`[Research Service] ✅ Gemini fallback successful: ${fallbackResults.length} results.`);
-        return fallbackResults;
-      } catch (geminiError: any) {
-        console.error(`[Research Service] 💀 Gemini fallback also failed:`, geminiError.message || geminiError);
-        return [];
+  for (const provider of orderedProviders) {
+    console.log(`[Research Service] 🔍 Trying provider: ${provider.name}`);
+    try {
+      let results: ResearchResult[] = [];
+      switch (provider.id) {
+        case 'GEMINI':
+          results = await researchWithGemini(query);
+          break;
+        case 'KIMI':
+          results = await researchWithOpenAICompatible(
+            query,
+            'https://api.moonshot.cn/v1/chat/completions',
+            process.env.KIMI_API_KEY || '',
+            'moonshot-v1-8k',
+            'Moonshot Kimi'
+          );
+          break;
+        case 'ZAI':
+          results = await researchWithOpenAICompatible(
+            query,
+            'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+            process.env.ZAI_API_KEY || '',
+            'glm-4',
+            'Zhipu AI'
+          );
+          break;
+        case 'ML':
+          results = await researchWithOpenAICompatible(
+            query,
+            'https://api.aimlapi.com/chat/completions',
+            process.env.ML_API_KEY || '',
+            'gpt-4o',
+            'AI/ML API'
+          );
+          break;
+        default:
+          continue;
       }
+
+      if (results && results.length > 0) {
+        console.log(`[Research Service] ✅ ${provider.name} returned ${results.length} results.`);
+        return results;
+      } else {
+        console.warn(`[Research Service] ⚠️ ${provider.name} returned empty results. Trying next provider...`);
+      }
+    } catch (error: any) {
+      console.error(`[Research Service] ❌ Error with ${provider.name}:`, error.message || error);
+      // Continue to next provider
     }
-    return [];
   }
+
+  console.error("[Research Service] 💀 All research providers failed. No data available.");
+  throw new Error("Research failed across all providers. Check API keys and network status.");
 }
 
 async function researchWithGemini(query: string): Promise<ResearchResult[]> {
@@ -118,8 +118,8 @@ async function researchWithGemini(query: string): Promise<ResearchResult[]> {
   }
 
   // Final Fallback: If all AI attempts failed, we throw an error instead of using mock data
-  console.error("[Research Service] 💀 All research providers failed. No data available.");
-  throw new Error("Research failed across all providers. Check API keys and network status.");
+  console.error("[Research Service] 💀 Gemini failed across all models.");
+  throw new Error("Gemini research failed.");
 }
 
 async function researchWithOpenAICompatible(

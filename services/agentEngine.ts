@@ -1,8 +1,7 @@
 
 import { supabase } from './supabase';
-import { extractGeminiInlineImageData, extractGeminiText, geminiGenerateContent } from './geminiClient';
-
-const TEXT_MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+import { GoogleGenAI } from "@google/genai";
+import { performResearch } from './researchService';
 
 const SPECTRUM_LABELS: Record<number, string> = {
   [-3]: 'Far Left (Anarchism)',
@@ -32,13 +31,8 @@ export const checkAndRunDueAgents = async (
   onStepUpdate?: (step: string, progress: number) => void, 
   targetBotId?: string
 ) => {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY;
-  if (!apiKey) {
-    const errMsg = 'Gemini API key is missing.';
-    console.error(`Agent Engine Error: ${errMsg}`);
-    if (onStepUpdate) onStepUpdate(`Error: ${errMsg}`, 0);
-    return;
-  }
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return;
 
   try {
     // 1. Fetch active journalists
@@ -70,7 +64,8 @@ export const checkAndRunDueAgents = async (
     // 3. Start Deployment Sequence
     if (onStepUpdate) onStepUpdate(`Initializing ${dueBot.name}...`, 5);
 
-
+    const ai = new GoogleGenAI({ apiKey });
+    
     // 4. Intelligence Scoping
     if (onStepUpdate) onStepUpdate(`Scouting intelligence for ${dueBot.category}...`, 15);
 
@@ -84,19 +79,27 @@ export const checkAndRunDueAgents = async (
     // 5. Research and Content Generation
     if (onStepUpdate) onStepUpdate(`Investigating & Drafting Article...`, 35);
     
-    const textResponse = await geminiGenerateContent(
-      apiKey,
-      {
-        contents: [{ role: 'user', parts: [{ text: `Write a 750-word investigative article regarding: ${dueBot.niche}. 
-          Ensure your ${SPECTRUM_LABELS[dueBot.perspective || 0]} perspective is clear but well-reasoned. 
-          Format: Return ONLY valid HTML (<h1>, <h2>, <p>, <blockquote>). No markdown wrappers.` }] }],
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        tools: dueBot.use_current_events ? [{ googleSearch: {} }] : []
-      },
-      TEXT_MODEL_CANDIDATES
-    );
+    let researchContext = "";
+    if (dueBot.use_current_events) {
+      if (onStepUpdate) onStepUpdate(`Performing deep research via round-robin...`, 40);
+      const research = await performResearch(dueBot.niche);
+      researchContext = research.map(r => `[Source: ${r.source}] ${r.title}: ${r.summary}`).join('\n');
+    }
 
-    let fullText = extractGeminiText(textResponse);
+    const textResponse = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: `Write a 750-word investigative article regarding: ${dueBot.niche}. 
+      ${researchContext ? `Use the following research data to inform your writing:\n${researchContext}` : ''}
+      Ensure your ${SPECTRUM_LABELS[dueBot.perspective || 0]} perspective is clear but well-reasoned. 
+      Format: Return ONLY valid HTML (<h1>, <h2>, <p>, <blockquote>). No markdown wrappers.`,
+      config: { 
+        systemInstruction,
+        // We still allow Gemini tools as a secondary layer if needed, but the primary research is now handled by our service
+        tools: dueBot.use_current_events ? [{ googleSearch: {} }] : [] 
+      }
+    });
+    
+    let fullText = textResponse.text || '';
     fullText = fullText.replace(/^```html\n?|```$/g, '').trim();
     const title = fullText.match(/<h1>(.*?)<\/h1>/)?.[1] || `${dueBot.niche} Update`;
     const content = fullText.replace(/<h1>.*?<\/h1>/, '').trim();
@@ -106,12 +109,13 @@ export const checkAndRunDueAgents = async (
     
     let featuredImageUrl = null;
     try {
-      const imgResponse = await geminiGenerateContent(apiKey, {
-        contents: [{ role: 'user', parts: [{ text: `A professional editorial news photo about: ${title}. High-end journalism aesthetic.` }] }],
-        imageConfig: { aspectRatio: '16:9' }
-      }, ['gemini-2.5-flash-image', 'gemini-2.0-flash-preview-image-generation']);
-      const imageData = extractGeminiInlineImageData(imgResponse);
-      if (imageData) featuredImageUrl = `data:image/png;base64,${imageData}`;
+      const imgResponse = await ai.models.generateContent({
+          model: 'gemini-2.5-flash-image',
+          contents: { parts: [{ text: `A professional editorial news photo about: ${title}. High-end journalism aesthetic.` }] },
+          config: { imageConfig: { aspectRatio: "16:9" } }
+      });
+      const imgPart = imgResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+      if (imgPart?.inlineData) featuredImageUrl = `data:image/png;base64,${imgPart.inlineData.data}`;
     } catch (e) { 
       console.warn("Agent Engine: Image generation failed, proceeding without it."); 
     }

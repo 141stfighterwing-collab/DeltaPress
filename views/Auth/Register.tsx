@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
+import { getPasswordStrength, validateInput, LIMITS } from '../../services/security';
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
@@ -12,9 +13,33 @@ const Register: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [strength, setStrength] = useState({ score: 0, feedback: '' });
+
+  useEffect(() => {
+    setStrength(getPasswordStrength(password));
+  }, [password]);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validations
+    const emailVal = validateInput(email, 'email');
+    if (!emailVal.valid) {
+      setError(emailVal.error || 'Invalid email');
+      return;
+    }
+
+    const userVal = validateInput(username, 'text', LIMITS.USERNAME);
+    if (!userVal.valid) {
+      setError(`Username: ${userVal.error}`);
+      return;
+    }
+
+    if (strength.score < 3) {
+      setError(`Password is too weak: ${strength.feedback}`);
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
       return;
@@ -104,30 +129,41 @@ const Register: React.FC = () => {
                 placeholder="you@example.com"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-black uppercase text-gray-500 mb-1 tracking-widest">Password</label>
-                <input 
-                  type="password" 
-                  className="w-full border border-gray-300 p-3 rounded focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white text-gray-900 placeholder-gray-400"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  placeholder="••••••••"
-                  minLength={6}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-black uppercase text-gray-500 mb-1 tracking-widest">Confirm</label>
-                <input 
-                  type="password" 
-                  className="w-full border border-gray-300 p-3 rounded focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white text-gray-900 placeholder-gray-400"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  placeholder="••••••••"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-black uppercase text-gray-500 mb-1 tracking-widest">Password</label>
+              <input 
+                type="password" 
+                className="w-full border border-gray-300 p-3 rounded focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white text-gray-900 placeholder-gray-400"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+              />
+              {password && (
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-500 ${
+                        strength.score <= 1 ? 'bg-red-500 w-1/4' : 
+                        strength.score === 2 ? 'bg-orange-500 w-2/4' : 
+                        strength.score === 3 ? 'bg-yellow-500 w-3/4' : 'bg-green-500 w-full'
+                      }`}
+                    />
+                  </div>
+                  <span className="text-[9px] font-bold uppercase text-gray-400">{strength.feedback}</span>
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase text-gray-500 mb-1 tracking-widest">Confirm</label>
+              <input 
+                type="password" 
+                className="w-full border border-gray-300 p-3 rounded focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white text-gray-900 placeholder-gray-400"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+              />
             </div>
             <button 
               type="submit" 

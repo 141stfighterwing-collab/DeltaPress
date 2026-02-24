@@ -3,7 +3,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
 import { checkAndRunDueAgents } from '../../services/agentEngine';
-import { extractGeminiInlineImageData, extractGeminiText, geminiGenerateContent } from "../../services/geminiClient";
+import { performResearch } from '../../services/researchService';
+import { GoogleGenAI, Type } from "@google/genai";
 import AdminSidebar from '../../components/AdminSidebar';
 
 interface Bot {
@@ -50,8 +51,6 @@ const DEFAULT_AVATAR_URLS = {
   male: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop',
   female: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop'
 };
-
-const RESEARCH_MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
 
 const JournalistsView: React.FC = () => {
   const navigate = useNavigate();
@@ -116,31 +115,7 @@ const JournalistsView: React.FC = () => {
     setIsSearchingNews(true);
     setNewsResults([]);
     try {
-      const apiKey = import.meta.env.VITE_API_KEY || process.env.API_KEY || '';
-      if (!apiKey) throw new Error('Gemini API key missing');
-
-      const response = await geminiGenerateContent(
-        apiKey,
-        {
-          contents: [{ role: 'user', parts: [{ text: `Fetch and summarize 5 major news topics or articles regarding: "${newsQuery}".` }] }],
-          tools: [{ googleSearch: {} }],
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'ARRAY',
-            items: {
-              type: 'OBJECT',
-              properties: {
-                title: { type: 'STRING' },
-                summary: { type: 'STRING' }
-              },
-              required: ['title', 'summary']
-            }
-          }
-        },
-        RESEARCH_MODEL_CANDIDATES
-      );
-
-      const results = JSON.parse(extractGeminiText(response) || '[]');
+      const results = await performResearch(newsQuery);
       setNewsResults(results);
     } catch (err) {
       console.error(err);
@@ -192,18 +167,16 @@ const JournalistsView: React.FC = () => {
     if (!formData.name) return;
     setIsGeneratingAvatar(true);
     try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
       const prompt = `Realistic editorial headshot of a ${formData.age}-year-old ${formData.ethnicity} ${formData.gender} news journalist, ${formData.hair_color} hair, professional neutral background, high-end photography.`;
-      const response = await geminiGenerateContent(
-        import.meta.env.VITE_API_KEY || process.env.API_KEY || '',
-        {
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          imageConfig: { aspectRatio: '1:1' }
-        },
-        ['gemini-2.5-flash-image', 'gemini-2.0-flash-preview-image-generation']
-      );
-      const imageData = extractGeminiInlineImageData(response);
-      if (imageData) {
-        setFormData(prev => ({ ...prev, avatar_url: `data:image/png;base64,${imageData}` }));
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: { parts: [{ text: prompt }] },
+        config: { imageConfig: { aspectRatio: "1:1" } }
+      });
+      const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+      if (imagePart?.inlineData) {
+        setFormData(prev => ({ ...prev, avatar_url: `data:image/png;base64,${imagePart.inlineData.data}` }));
       }
     } catch (err) {} finally { setIsGeneratingAvatar(false); }
   };

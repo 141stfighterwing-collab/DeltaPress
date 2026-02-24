@@ -1,10 +1,8 @@
 
-import { extractGeminiText, geminiGenerateContent } from "./geminiClient";
-
-const MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+import { GoogleGenAI } from "@google/genai";
 
 export async function generateBlogPostDraft(topic: string) {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   
   if (!apiKey || apiKey === '') {
     const msg = "Gemini API key is missing or empty. Verify Vercel Env Variables.";
@@ -16,20 +14,19 @@ export async function generateBlogPostDraft(topic: string) {
   console.debug(`Gemini Request starting with key length: ${apiKey.length}`);
 
   try {
-    const response = await geminiGenerateContent(
-      apiKey,
-      {
-        contents: [{ role: 'user', parts: [{ text: `Write a high-quality blog post draft about: ${topic}. 
-          Include a title, engaging paragraphs, and a conclusion. 
-          Format with basic HTML like <h2> and <p>.` }] }]
-      },
-      MODEL_CANDIDATES
-    );
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Write a high-quality blog post draft about: ${topic}. 
+      Include a title, engaging paragraphs, and a conclusion. 
+      Format with basic HTML like <h2> and <p>.`,
+    });
+    
+    if (!response || !response.text) {
+      throw new Error("Received empty response from Gemini API.");
+    }
 
-    const text = extractGeminiText(response);
-    if (!text) throw new Error('Received empty response from Gemini API.');
-
-    return text;
+    return response.text;
   } catch (error: any) {
     console.error("Gemini SDK Exception:", error);
     

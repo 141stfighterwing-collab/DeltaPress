@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link, useLocation } from 'react-router-dom';
 import { generateBlogPostDraft } from '../../services/gemini';
 import { supabase } from '../../services/supabase';
-import { sanitizeHtml, cleanSlug, LIMITS, extractYouTubeVideoId } from '../../services/security';
+import { sanitizeHtml, cleanSlug, LIMITS, extractYouTubeVideoId, isPotentiallySqlInjection } from '../../services/security';
 import AdminSidebar from '../../components/AdminSidebar';
 
 const PostEditor: React.FC = () => {
@@ -31,10 +31,7 @@ const PostEditor: React.FC = () => {
   const [catErrorMsg, setCatErrorMsg] = useState('');
   
   const [showAiModal, setShowAiModal] = useState(false);
-  type GoogleEmbedType = 'forms' | 'sheets' | 'docs';
-
   const [showMediaModal, setShowMediaModal] = useState<{ type: 'audio' | 'video', url: string } | null>(null);
-  const [showGoogleEmbedModal, setShowGoogleEmbedModal] = useState<{ type: GoogleEmbedType, url: string } | null>(null);
   const [aiTopic, setAiTopic] = useState('');
 
   const fetchData = async () => {
@@ -114,63 +111,6 @@ const PostEditor: React.FC = () => {
     }, 10);
   };
 
-
-  const getGoogleEmbedSrc = (type: GoogleEmbedType, rawUrl: string): string | null => {
-    if (!rawUrl) return null;
-
-    let parsed: URL;
-    try {
-      parsed = new URL(rawUrl);
-    } catch {
-      return null;
-    }
-
-    if (parsed.hostname !== 'docs.google.com') return null;
-
-    if (type === 'forms') {
-      if (!parsed.pathname.includes('/forms/')) return null;
-      if (!parsed.pathname.includes('/viewform')) return null;
-      parsed.searchParams.set('embedded', 'true');
-      return parsed.toString();
-    }
-
-    if (type === 'sheets') {
-      if (!parsed.pathname.includes('/spreadsheets/')) return null;
-      parsed.pathname = parsed.pathname.replace(/\/edit$/, '/pubhtml').replace(/\/edit\/.+$/, '/pubhtml');
-      if (!parsed.pathname.endsWith('/pubhtml')) parsed.pathname = `${parsed.pathname.replace(/\/$/, '')}/pubhtml`;
-      parsed.searchParams.set('widget', 'true');
-      parsed.searchParams.set('headers', 'false');
-      return parsed.toString();
-    }
-
-    if (!parsed.pathname.includes('/document/')) return null;
-    parsed.pathname = parsed.pathname.replace(/\/edit$/, '/preview').replace(/\/edit\/.+$/, '/preview');
-    if (!parsed.pathname.endsWith('/preview')) parsed.pathname = `${parsed.pathname.replace(/\/$/, '')}/preview`;
-    return parsed.toString();
-  };
-
-  const handleInsertGoogleEmbed = () => {
-    if (!showGoogleEmbedModal) return;
-    const embedSrc = getGoogleEmbedSrc(showGoogleEmbedModal.type, showGoogleEmbedModal.url.trim());
-    if (!embedSrc) {
-      alert('Please provide a valid Google Forms/Sheets/Docs link from docs.google.com.');
-      return;
-    }
-
-    const defaultHeights: Record<GoogleEmbedType, number> = {
-      forms: 900,
-      sheets: 620,
-      docs: 720,
-    };
-
-    insertFormatting(`<div class="google-embed-wrap">
-  <iframe src="${embedSrc}" width="100%" height="${defaultHeights[showGoogleEmbedModal.type]}" style="border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
-</div>
-
-`);
-    setShowGoogleEmbedModal(null);
-  };
-
   const handleInsertMedia = () => {
     if (!showMediaModal || !showMediaModal.url) { setShowMediaModal(null); return; }
     let { type, url } = showMediaModal;
@@ -220,6 +160,11 @@ const PostEditor: React.FC = () => {
 
     if (title.length > LIMITS.POST_TITLE) {
       alert(`Title exceeds limit of ${LIMITS.POST_TITLE} characters.`);
+      return;
+    }
+
+    if (isPotentiallySqlInjection(title) || isPotentiallySqlInjection(content)) {
+      alert("Security Alert: Potentially dangerous characters detected in title or content.");
       return;
     }
 
@@ -301,9 +246,6 @@ const PostEditor: React.FC = () => {
                   <div className="h-6 w-px bg-gray-300 mx-2" />
                   <button type="button" onClick={() => setShowMediaModal({ type: 'audio', url: '' })} className="px-4 h-9 flex items-center justify-center hover:bg-blue-600 hover:text-white rounded text-[10px] font-black uppercase tracking-widest text-blue-600 border border-blue-100 transition-all">🎵 Audio</button>
                   <button type="button" onClick={() => setShowMediaModal({ type: 'video', url: '' })} className="px-4 h-9 flex items-center justify-center hover:bg-red-600 hover:text-white rounded text-[10px] font-black uppercase tracking-widest text-red-600 border border-red-100 transition-all">🎬 Video</button>
-                  {contentType === 'page' && (
-                    <button type="button" onClick={() => setShowGoogleEmbedModal({ type: 'forms', url: '' })} className="px-4 h-9 flex items-center justify-center hover:bg-emerald-600 hover:text-white rounded text-[10px] font-black uppercase tracking-widest text-emerald-700 border border-emerald-100 transition-all">🧩 Google Embed</button>
-                  )}
                 </div>
 
                 <div className="p-10 bg-white min-h-[800px]">
@@ -427,50 +369,6 @@ const PostEditor: React.FC = () => {
           </div>
         </div>
       )}
-
-      {showGoogleEmbedModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[110] backdrop-blur-sm">
-          <div className="bg-white p-10 rounded-xl max-w-lg w-full shadow-2xl border-t-8 border-emerald-700">
-            <div className="mb-6">
-              <h2 className="text-3xl font-bold font-serif text-gray-900">🧩 Google Embed</h2>
-              <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-1">Forms, Sheets, or Docs</p>
-            </div>
-
-            <div className="space-y-5">
-              <div className="space-y-2">
-                <label className="block text-[10px] font-black uppercase text-gray-500">Embed Type</label>
-                <select
-                  className="w-full border-2 border-gray-100 p-4 rounded-lg outline-none focus:border-emerald-500 font-bold"
-                  value={showGoogleEmbedModal.type}
-                  onChange={(e) => setShowGoogleEmbedModal({ ...showGoogleEmbedModal, type: e.target.value as GoogleEmbedType })}
-                >
-                  <option value="forms">Google Forms</option>
-                  <option value="sheets">Google Sheets</option>
-                  <option value="docs">Google Docs</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-[10px] font-black uppercase text-gray-500">Google URL</label>
-                <input
-                  type="url"
-                  className="w-full border-2 border-gray-100 p-4 rounded-lg outline-none focus:border-emerald-500 text-gray-900 bg-gray-50 font-mono text-sm"
-                  placeholder="https://docs.google.com/..."
-                  value={showGoogleEmbedModal.url}
-                  onChange={(e) => setShowGoogleEmbedModal({ ...showGoogleEmbedModal, url: e.target.value })}
-                />
-                <p className="text-[10px] text-gray-400 font-semibold">Use a share URL. It will be transformed to an embed/preview URL automatically.</p>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-6 border-t">
-                <button type="button" onClick={() => setShowGoogleEmbedModal(null)} className="text-gray-400 font-bold px-4 uppercase text-[10px] tracking-widest">Cancel</button>
-                <button type="button" onClick={handleInsertGoogleEmbed} className="bg-emerald-700 text-white px-10 py-3 rounded-lg font-black uppercase text-[10px] shadow-xl">Insert</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
 
       {showAiModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[100] backdrop-blur-sm">

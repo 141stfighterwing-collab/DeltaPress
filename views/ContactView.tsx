@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import Layout from '../components/Layout';
 import { supabase } from '../services/supabase';
-import { sanitizeHtml, stripAllHtml, isValidEmail } from '../services/security';
+import { sanitizeHtml, stripAllHtml, validateInput, isPotentiallySqlInjection } from '../services/security';
 
 const ContactView: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -19,13 +19,21 @@ const ContactView: React.FC = () => {
     e.preventDefault();
     setError(null);
 
-    if (!formData.name || !formData.email || !formData.message) {
-      setError("Please fill in all required fields.");
+    // Validations
+    const nameVal = validateInput(formData.name, 'text', 100);
+    if (!nameVal.valid) {
+      setError(`Name: ${nameVal.error}`);
       return;
     }
 
-    if (!isValidEmail(formData.email)) {
-      setError("Please enter a valid email address.");
+    const emailVal = validateInput(formData.email, 'email');
+    if (!emailVal.valid) {
+      setError(`Email: ${emailVal.error}`);
+      return;
+    }
+
+    if (isPotentiallySqlInjection(formData.message)) {
+      setError("Invalid characters detected in message.");
       return;
     }
 

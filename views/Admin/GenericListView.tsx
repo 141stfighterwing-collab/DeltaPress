@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
-import { cleanSlug } from '../../services/security';
+import { cleanSlug, validateInput, isPotentiallySqlInjection } from '../../services/security';
 import AdminSidebar from '../../components/AdminSidebar';
 
 interface Props {
@@ -113,6 +113,19 @@ const GenericListView: React.FC<Props> = ({ title, table, filterType }) => {
 
   const handleSaveItem = async () => {
     if (!itemValue.trim()) return;
+
+    // Validation
+    const inputVal = validateInput(itemValue, 'text', 5000);
+    if (!inputVal.valid) {
+      alert(`Invalid Input: ${inputVal.error}`);
+      return;
+    }
+
+    if (isPotentiallySqlInjection(itemValue)) {
+      alert("Security Alert: Potentially dangerous characters detected.");
+      return;
+    }
+
     setIsSaving(true);
     try {
       const payload: any = {};

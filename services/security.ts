@@ -11,6 +11,41 @@ export const LIMITS = {
   USERNAME: 30,
   DISPLAY_NAME: 50,
   URL: 2048,
+  PASSWORD_MIN: 8,
+  PASSWORD_MAX: 128,
+};
+
+/**
+ * Basic SQL Injection check for raw strings.
+ * Supabase client handles this by default, but this is useful for raw RPC calls.
+ */
+export const isPotentiallySqlInjection = (input: string): boolean => {
+  const sqlPatterns = [
+    /(\%27)|(\')|(\-\-)|(\%23)|(#)/i,
+    /((\%3D)|(=))[^\n]*((\%27)|(\')|(\-\-)|(\%3B)|(;))/i,
+    /\w*((\%27)|(\'))((\%6F)|o|(\%4F))((\%72)|r|(\%52))/i,
+    /((\%27)|(\'))union/i,
+    /exec(\s|\+)+(s|x)p\w+/i,
+    /DROP\s+TABLE/i,
+    /DELETE\s+FROM/i,
+    /UPDATE\s+.*SET/i,
+    /INSERT\s+INTO/i,
+  ];
+  return sqlPatterns.some(pattern => pattern.test(input));
+};
+
+/**
+ * Escapes HTML special characters to prevent XSS in plain text contexts.
+ */
+export const escapeHtml = (text: string): string => {
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text.replace(/[&<>"']/g, (m) => map[m]);
 };
 
 /**
@@ -53,7 +88,7 @@ export const sanitizeHtml = (html: string): string => {
     .replace(/\s+on\w+="[^"]*"/g, "")
     .replace(/\s+on\w+='[^']*'/g, "")
     // Remove javascript: pseudo-protocol in links
-    .replace(/href\s*=\s*(['"])javascript:[^'"]*([\1])/gim, "href=$1#$2")
+    .replace(/href\s*=\s*(['"])javascript:[^'"]*\1/gim, "href=$1#$1")
     // Remove potentially dangerous tags unless they are from trusted media providers
     .replace(/<(meta|link|iframe|embed|object)\b[^>]*>/gim, (match) => {
       const lower = match.toLowerCase();
@@ -62,7 +97,6 @@ export const sanitizeHtml = (html: string): string => {
         lower.includes('youtube.com') || 
         lower.includes('youtube-nocookie.com') ||
         lower.includes('youtu.be') ||
-        lower.includes('docs.google.com') ||
         lower.includes('spotify.com') || 
         lower.includes('soundcloud.com')
       ) {
@@ -110,4 +144,44 @@ export const isValidUrl = (url: string): boolean => {
  */
 export const stripAllHtml = (text: string): string => {
   return text.replace(/<[^>]*>?/gm, '').trim();
+};
+
+/**
+ * Validates password strength.
+ * Requires min 8 chars, 1 uppercase, 1 lowercase, 1 number.
+ */
+export const getPasswordStrength = (password: string): { score: number, feedback: string } => {
+  if (!password) return { score: 0, feedback: 'Password is required' };
+  if (password.length < LIMITS.PASSWORD_MIN) return { score: 1, feedback: `Minimum ${LIMITS.PASSWORD_MIN} characters` };
+  
+  let score = 0;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[a-z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+  
+  if (score < 3) return { score: 2, feedback: 'Weak: Add numbers or symbols' };
+  if (score === 3) return { score: 3, feedback: 'Medium' };
+  return { score: 4, feedback: 'Strong' };
+};
+
+/**
+ * Generic input validator.
+ */
+export const validateInput = (value: string, type: 'email' | 'url' | 'slug' | 'text', maxLength?: number): { valid: boolean, error?: string } => {
+  if (!value) return { valid: false, error: 'Field is required' };
+  if (maxLength && value.length > maxLength) return { valid: false, error: `Maximum ${maxLength} characters exceeded` };
+  
+  switch (type) {
+    case 'email':
+      return isValidEmail(value) ? { valid: true } : { valid: false, error: 'Invalid email format' };
+    case 'url':
+      return isValidUrl(value) ? { valid: true } : { valid: false, error: 'Invalid URL format' };
+    case 'slug':
+      const clean = cleanSlug(value);
+      return clean === value ? { valid: true } : { valid: false, error: 'Slug contains invalid characters' };
+    default:
+      if (isPotentiallySqlInjection(value)) return { valid: false, error: 'Invalid characters detected' };
+      return { valid: true };
+  }
 };

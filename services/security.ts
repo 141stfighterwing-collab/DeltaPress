@@ -4,8 +4,6 @@
  * Focuses on XSS prevention, Input Validation, and Data Integrity.
  */
 
-import DOMPurify from 'dompurify';
-
 export const LIMITS = {
   POST_TITLE: 200,
   POST_CONTENT: 100000,
@@ -68,8 +66,7 @@ export const normalizeYouTubeEmbeds = (html: string): string => {
   if (!html) return '';
   
   // Find raw iframes and check if they are YouTube. If they are, wrap them and fix the URL.
-  // We use a more flexible regex that allows optional content/space between tags
-  return html.replace(/<iframe\b[^>]*src=(['"])([^'"]+)\1[^>]*>([\s\S]*?)<\/iframe>/gim, (fullMatch, _quote, src, content) => {
+  return html.replace(/<iframe\b[^>]*src=(['"])([^'"]+)\1[^>]*><\/iframe>/gim, (fullMatch, _quote, src) => {
     const videoId = extractYouTubeVideoId(src);
     if (!videoId) return fullMatch;
     
@@ -77,65 +74,36 @@ export const normalizeYouTubeEmbeds = (html: string): string => {
   });
 };
 
-// Configure trusted media domains for iframes
-const TRUSTED_MEDIA_DOMAINS = [
-  'youtube.com',
-  'youtube-nocookie.com',
-  'youtu.be',
-  'spotify.com',
-  'soundcloud.com'
-];
-
 /**
- * Validates if an iframe source points to a trusted media provider.
- */
-const isTrustedIframe = (src: string): boolean => {
-  try {
-    const url = new URL(src, typeof window !== 'undefined' ? window.location.href : 'https://example.com');
-    const hostname = url.hostname.toLowerCase();
-    return TRUSTED_MEDIA_DOMAINS.some(domain => hostname === domain || hostname.endsWith('.' + domain));
-  } catch (e) {
-    return false;
-  }
-};
-
-// Initialize DOMPurify hook for secure iframe filtering
-if (typeof window !== 'undefined') {
-    DOMPurify.addHook('uponSanitizeElement', (node, data) => {
-        if (data.tagName === 'iframe') {
-            const src = node.getAttribute('src') || '';
-            if (!isTrustedIframe(src)) {
-                node.parentNode?.removeChild(node);
-            }
-        }
-    });
-}
-
-/**
- * Robust HTML Sanitizer to prevent XSS using DOMPurify.
- * Removes dangerous tags and attributes while preserving safe HTML and trusted media.
+ * Basic HTML Sanitizer to prevent XSS.
+ * Removes <script>, <object>, <embed>, and inline event handlers.
  */
 export const sanitizeHtml = (html: string): string => {
   if (!html) return '';
   
-  // Perform sanitization in a single pass with comprehensive configuration
-  const sanitized = DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: [
-      'address', 'article', 'aside', 'footer', 'header', 'h1', 'h2', 'h3', 'h4',
-      'h5', 'h6', 'hgroup', 'main', 'nav', 'section', 'blockquote', 'dd', 'div',
-      'dl', 'dt', 'figcaption', 'figure', 'hr', 'li', 'ol', 'p', 'pre',
-      'ul', 'a', 'abbr', 'b', 'bdi', 'bdo', 'br', 'cite', 'code', 'data', 'dfn',
-      'em', 'i', 'kbd', 'mark', 'q', 'rb', 'rp', 'rt', 'rtc', 'ruby', 's', 'samp',
-      'small', 'span', 'strong', 'sub', 'sup', 'time', 'u', 'var', 'wbr', 'caption',
-      'col', 'colgroup', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr',
-      'img', 'iframe', 'audio', 'video', 'source'
-    ],
-    ALLOWED_ATTR: [
-      'href', 'name', 'target', 'title', 'src', 'alt', 'width', 'height', 'class',
-      'id', 'style', 'controls', 'autoplay', 'loop', 'muted', 'poster', 'preload',
-      'allow', 'allowfullscreen', 'frameborder', 'rel'
-    ],
-  });
+  const sanitized = html
+    // Remove script tags and their content
+    .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
+    // Remove inline event handlers (onclick, onmouseover, etc.)
+    .replace(/\s+on\w+="[^"]*"/g, "")
+    .replace(/\s+on\w+='[^']*'/g, "")
+    // Remove javascript: pseudo-protocol in links
+    .replace(/href\s*=\s*(['"])javascript:[^'"]*\1/gim, "href=$1#$1")
+    // Remove potentially dangerous tags unless they are from trusted media providers
+    .replace(/<(meta|link|iframe|embed|object)\b[^>]*>/gim, (match) => {
+      const lower = match.toLowerCase();
+      // Explicitly allow safe iframes with common video/audio patterns
+      if (
+        lower.includes('youtube.com') || 
+        lower.includes('youtube-nocookie.com') ||
+        lower.includes('youtu.be') ||
+        lower.includes('spotify.com') || 
+        lower.includes('soundcloud.com')
+      ) {
+        return match;
+      }
+      return "";
+    });
 
   return normalizeYouTubeEmbeds(sanitized);
 };

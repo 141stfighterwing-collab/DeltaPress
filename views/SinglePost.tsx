@@ -135,7 +135,7 @@ const SinglePost: React.FC = () => {
           </div>
         )}
 
-        <div className="wp-entry-content font-serif" dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content) }} />
+        <div className="wp-entry-content font-serif" dangerouslySetInnerHTML={{ __html: normalizeYouTubeEmbeds(post.content) }} />
 
         <section className="mt-16 border-t border-gray-100 pt-10">
           <h3 className="text-2xl font-bold font-serif mb-6 text-gray-900">{comments.length} Thoughts on this post</h3>
@@ -150,7 +150,7 @@ const SinglePost: React.FC = () => {
                     <span className="text-xs font-black uppercase tracking-tight text-gray-900">{c.author_name}</span>
                     <span className="text-[10px] text-gray-400 uppercase">{new Date(c.created_at).toLocaleDateString()}</span>
                   </div>
-                  <div className="text-sm text-gray-700 font-serif leading-relaxed" dangerouslySetInnerHTML={{ __html: sanitizeHtml(c.content) }} />
+                  <div className="text-sm text-gray-700 font-serif leading-relaxed" dangerouslySetInnerHTML={{ __html: c.content }} />
                 </div>
               </div>
             ))}

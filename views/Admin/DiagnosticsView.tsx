@@ -2,6 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
 import { geminiValidateApiKey } from "../../services/geminiClient";
+import { 
+  getProviderStatus, 
+  getAvailableProviders, 
+  resetProviderHealth,
+  research,
+  ResearchResponse,
+  AIProvider,
+  PROVIDER_CONFIGS
+} from "../../services/aiProviders";
 import AdminSidebar from '../../components/AdminSidebar';
 
 interface TableHealth {
@@ -13,14 +22,22 @@ interface TableHealth {
 
 interface ApiHealth {
   keyName: string;
-  provider: 'gemini' | 'kimi' | 'aiml';
+  provider: AIProvider;
   status: 'healthy' | 'down' | 'missing';
   detail: string;
 }
 
+interface ProviderTestResult {
+  provider: AIProvider;
+  success: boolean;
+  response?: string;
+  error?: string;
+  model?: string;
+  latency?: number;
+}
+
 const DiagnosticsView: React.FC = () => {
   const navigate = useNavigate();
-  const [geminiStatus, setGeminiStatus] = useState<'pending' | 'ok' | 'error'>('pending');
   const [dbStatus, setDbStatus] = useState<'pending' | 'ok' | 'error'>('pending');
   const [overallStatus, setOverallStatus] = useState<'pending' | 'ok' | 'error'>('pending');
   const [tableHealth, setTableHealth] = useState<TableHealth[]>([]);
@@ -28,6 +45,9 @@ const DiagnosticsView: React.FC = () => {
   const [logs, setLogs] = useState<string[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
+  const [isTestingAll, setIsTestingAll] = useState(false);
+  const [testResults, setTestResults] = useState<ProviderTestResult[]>([]);
+  const [roundRobinTest, setRoundRobinTest] = useState<ResearchResponse | null>(null);
 
   const addLog = (msg: string) => {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -35,8 +55,7 @@ const DiagnosticsView: React.FC = () => {
 
   const safeEnv = (name: string): string => {
     const viteVal = (import.meta as any)?.env?.[name];
-    const procVal = (process as any)?.env?.[name];
-    return (viteVal || procVal || '').trim();
+    return (viteVal || '').trim();
   };
 
   const maskKey = (key: string): string => {
@@ -45,104 +64,147 @@ const DiagnosticsView: React.FC = () => {
     return `${key.slice(0, 4)}***${key.slice(-4)}`;
   };
 
-  const summarizeGeminiError = (raw?: string) => {
-    if (!raw) return 'No error payload returned.';
-
+  const summarizeError = (raw?: string): string => {
+    if (!raw) return 'No error details';
     try {
       const parsed = JSON.parse(raw);
-      const message = parsed?.error?.message || parsed?.message || raw;
-      const status = parsed?.error?.status ? ` status=${parsed.error.status};` : '';
-      const code = typeof parsed?.error?.code !== 'undefined' ? ` code=${parsed.error.code};` : '';
-      return `${code}${status} message=${String(message).replace(/\s+/g, ' ').trim()}`;
+      return parsed?.error?.message || parsed?.message || raw.substring(0, 100);
     } catch {
-      return raw.replace(/\s+/g, ' ').trim();
+      return raw.substring(0, 100);
     }
+  };
+
+  // Test individual provider with a real API call
+  const testProvider = async (provider: AIProvider): Promise<ProviderTestResult> => {
+    const config = PROVIDER_CONFIGS[provider];
+    const key = safeEnv(config.apiKeyEnv);
+    
+    if (!key) {
+      return { provider, success: false, error: 'API key not configured' };
+    }
+    
+    const startTime = Date.now();
+    
+    try {
+      const result = await research({
+        prompt: 'Reply with exactly: "API test successful!" and nothing else.',
+        maxTokens: 20,
+        temperature: 0
+      });
+      
+      const latency = Date.now() - startTime;
+      
+      return {
+        provider,
+        success: result.success,
+        response: result.content?.substring(0, 50),
+        error: result.error,
+        model: result.model,
+        latency
+      };
+    } catch (error: any) {
+      return {
+        provider,
+        success: false,
+        error: error.message,
+        latency: Date.now() - startTime
+      };
+    }
+  };
+
+  // Test all configured providers
+  const testAllProviders = async () => {
+    setIsTestingAll(true);
+    setTestResults([]);
+    addLog('🧪 Testing all configured AI providers...');
+    
+    const available = getAvailableProviders();
+    
+    if (available.length === 0) {
+      addLog('❌ No providers configured. Set at least one API key.');
+      setIsTestingAll(false);
+      return;
+    }
+    
+    const results: ProviderTestResult[] = [];
+    
+    for (const provider of available) {
+      const config = PROVIDER_CONFIGS[provider];
+      addLog(`Testing ${config.name}...`);
+      
+      const result = await testProvider(provider);
+      results.push(result);
+      
+      if (result.success) {
+        addLog(`  ✅ ${config.name}: SUCCESS (${result.latency}ms, model: ${result.model})`);
+      } else {
+        addLog(`  ❌ ${config.name}: FAILED - ${result.error}`);
+      }
+      
+      setTestResults([...results]);
+    }
+    
+    const successCount = results.filter(r => r.success).length;
+    addLog(`\n📊 Results: ${successCount}/${results.length} providers working`);
+    
+    setIsTestingAll(false);
+  };
+
+  // Test round-robin specifically
+  const testRoundRobin = async () => {
+    addLog('🔄 Testing round-robin selection...');
+    
+    const result = await research({
+      prompt: 'Say "Round-robin working!" and nothing else.',
+      maxTokens: 20,
+      temperature: 0
+    });
+    
+    setRoundRobinTest(result);
+    
+    if (result.success) {
+      addLog(`✅ Round-robin test passed via ${result.provider} (${result.model})`);
+    } else {
+      addLog(`❌ Round-robin test failed: ${result.error}`);
+    }
+  };
+
+  const resetProviders = () => {
+    resetProviderHealth();
+    addLog('🔄 All provider health statuses reset');
   };
 
   const runRepair = async () => {
     setIsRepairing(true);
-    addLog("🛠️ STARTING SUPREME SCHEMA REPAIR...");
+    addLog("🛠️ Starting database repair...");
+    
     try {
       const repairSQL = `
         CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
         CREATE TABLE IF NOT EXISTS site_settings (
-            id INTEGER PRIMARY KEY,
-            title TEXT,
-            slogan TEXT,
-            logo_url TEXT,
-            header_image TEXT,
-            header_fit TEXT,
-            header_pos_x INTEGER,
-            header_pos_y INTEGER,
-            theme TEXT DEFAULT 'light',
-            title_color TEXT DEFAULT '#000000',
-            bg_color TEXT DEFAULT '#f1f1f1',
-            text_color TEXT DEFAULT '#111111',
-            header_font TEXT DEFAULT 'serif'
+            id INTEGER PRIMARY KEY, title TEXT, slogan TEXT, logo_url TEXT
         );
-
-        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS title_color TEXT DEFAULT '#000000';
-        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS bg_color TEXT DEFAULT '#f1f1f1';
-        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS text_color TEXT DEFAULT '#111111';
-        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS header_font TEXT DEFAULT 'serif';
-
         CREATE TABLE IF NOT EXISTS categories (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            name TEXT NOT NULL,
-            slug TEXT UNIQUE,
-            created_at TIMESTAMPTZ DEFAULT now()
+            name TEXT NOT NULL, slug TEXT UNIQUE, created_at TIMESTAMPTZ DEFAULT now()
         );
-
         CREATE TABLE IF NOT EXISTS journalists (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            name TEXT NOT NULL,
-            title TEXT,
-            niche TEXT,
-            category TEXT,
-            schedule TEXT DEFAULT '24h',
-            status TEXT DEFAULT 'active',
-            last_run TIMESTAMPTZ,
-            perspective INTEGER DEFAULT 0,
-            gender TEXT DEFAULT 'female',
-            ethnicity TEXT DEFAULT 'White',
-            hair_color TEXT DEFAULT 'Brunette',
-            avatar_url TEXT,
-            age INTEGER DEFAULT 35,
-            use_current_events BOOLEAN DEFAULT false,
-            created_at TIMESTAMPTZ DEFAULT now()
+            name TEXT NOT NULL, title TEXT, niche TEXT, category TEXT,
+            schedule TEXT DEFAULT '24h', status TEXT DEFAULT 'active',
+            last_run TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT now()
         );
-
-        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS age INTEGER DEFAULT 35;
-        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS use_current_events BOOLEAN DEFAULT false;
-        ALTER TABLE journalists ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES categories(id) ON DELETE SET NULL;
-
-        ALTER TABLE posts ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES posts(id) ON DELETE SET NULL;
-        ALTER TABLE posts ADD COLUMN IF NOT EXISTS menu_order INTEGER DEFAULT 0;
-        ALTER TABLE posts ADD COLUMN IF NOT EXISTS journalist_id UUID REFERENCES journalists(id) ON DELETE SET NULL;
-        ALTER TABLE posts ADD COLUMN IF NOT EXISTS featured_image TEXT;
-        ALTER TABLE posts ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES categories(id) ON DELETE SET NULL;
-        ALTER TABLE posts ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'post';
-        ALTER TABLE posts ADD COLUMN IF NOT EXISTS slug TEXT;
-        ALTER TABLE posts ADD COLUMN IF NOT EXISTS excerpt TEXT;
-
-        ALTER TABLE journalists ENABLE ROW LEVEL SECURITY;
-        DROP POLICY IF EXISTS "Allow public read journalists" ON journalists;
-        CREATE POLICY "Allow public read journalists" ON journalists FOR SELECT USING (true);
-        DROP POLICY IF EXISTS "Allow authenticated manage journalists" ON journalists;
-        CREATE POLICY "Allow authenticated manage journalists" ON journalists FOR ALL USING (auth.role() = 'authenticated');
       `;
-
-      addLog("📡 Executing Database Realignment...");
+      
       const { error } = await supabase.rpc('exec_sql', { sql: repairSQL });
-
+      
       if (error) {
-        addLog(`❌ REPAIR ERROR: ${error.message}`);
+        addLog(`❌ Repair error: ${error.message}`);
       } else {
-        addLog("✅ SUPREME REPAIR SUCCESSFUL.");
+        addLog("✅ Repair completed successfully");
       }
     } catch (err: any) {
-      addLog(`❌ CRITICAL FAILURE: ${err.message}`);
+      addLog(`❌ Repair failed: ${err.message}`);
     } finally {
       setIsRepairing(false);
       scanTableIntegrity();
@@ -151,268 +213,306 @@ const DiagnosticsView: React.FC = () => {
 
   const scanTableIntegrity = async () => {
     setIsScanning(true);
-    addLog("Auditing database health...");
-    const coreTables = ['categories', 'posts', 'profiles', 'rss_feeds', 'site_settings', 'comments', 'contacts', 'journalists'];
-    const healthResults: TableHealth[] = [];
-
-    for (const table of coreTables) {
+    addLog("Scanning database tables...");
+    
+    const tables = ['categories', 'posts', 'profiles', 'rss_feeds', 'site_settings', 'comments', 'contacts', 'journalists'];
+    const results: TableHealth[] = [];
+    
+    for (const table of tables) {
       try {
         const { count, error } = await supabase.from(table).select('*', { count: 'exact', head: true });
-        if (error) {
-          healthResults.push({ name: table, count: 0, status: 'blocked', error: error.message });
-        } else {
-          healthResults.push({ name: table, count: count || 0, status: 'ok' });
-        }
+        results.push({ 
+          name: table, 
+          count: count ?? 0, 
+          status: error ? 'blocked' : 'ok',
+          error: error?.message 
+        });
       } catch (e: any) {
-        healthResults.push({ name: table, count: 0, status: 'blocked', error: e.message });
+        results.push({ name: table, count: 0, status: 'blocked', error: e.message });
       }
     }
-    setTableHealth(healthResults);
+    
+    setTableHealth(results);
     setIsScanning(false);
-    addLog("Audit complete.");
+    addLog("Database scan complete");
   };
 
-  const validateKimiKey = async (key: string): Promise<{ ok: boolean; detail: string }> => {
-    try {
-      const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${key}`
-        },
-        body: JSON.stringify({
-          model: 'moonshot-v1-8k',
-          messages: [{ role: 'user', content: 'Reply with OK' }],
-          max_tokens: 5,
-          temperature: 0
-        })
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        return { ok: false, detail: `status=${response.status}; body=${summarizeGeminiError(text)}` };
-      }
-
-      return { ok: true, detail: `status=${response.status}` };
-    } catch (error: any) {
-      return { ok: false, detail: `transport=${error?.message || 'unknown error'}` };
+  // Validate API key by making actual call
+  const validateProviderKey = async (provider: AIProvider): Promise<{ ok: boolean; detail: string }> => {
+    const config = PROVIDER_CONFIGS[provider];
+    const key = safeEnv(config.apiKeyEnv);
+    
+    if (!key) {
+      return { ok: false, detail: 'Not configured' };
     }
-  };
-
-  const validateAimlKey = async (key: string): Promise<{ ok: boolean; detail: string }> => {
+    
+    // Use existing Gemini validation for Gemini
+    if (provider === 'gemini') {
+      const result = await geminiValidateApiKey(key);
+      return { ok: result.ok, detail: result.ok ? 'Connected' : 'Failed' };
+    }
+    
+    // For others, do a minimal test call
     try {
-      const response = await fetch('https://api.aimlapi.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${key}`
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'user', content: 'Reply with OK' }],
-          max_tokens: 5,
-          temperature: 0
-        })
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        return { ok: false, detail: `status=${response.status}; body=${summarizeGeminiError(text)}` };
-      }
-
-      return { ok: true, detail: `status=${response.status}` };
+      const result = await testProvider(provider);
+      return { ok: result.success, detail: result.success ? `Working (${result.latency}ms)` : result.error || 'Failed' };
     } catch (error: any) {
-      return { ok: false, detail: `transport=${error?.message || 'unknown error'}` };
+      return { ok: false, detail: error.message };
     }
   };
 
   const runDiagnostics = async () => {
     setLogs([]);
-    addLog("🚀 INITIALIZING DIAGNOSTICS...");
-
-    let dbHealthy = false;
-
+    addLog("🚀 Starting diagnostics...");
+    
+    // Test database
     try {
       const { error } = await supabase.from('site_settings').select('id').limit(1);
-      if (error) throw error;
-      setDbStatus('ok');
-      dbHealthy = true;
-      addLog("✅ Supabase Engine: Live.");
+      setDbStatus(error ? 'error' : 'ok');
+      addLog(error ? `❌ Database: ${error.message}` : '✅ Database: Connected');
     } catch (err: any) {
       setDbStatus('error');
-      addLog(`❌ Supabase Error: ${err.message}`);
+      addLog(`❌ Database: ${err.message}`);
     }
-
-    const geminiKeys = [
-      { keyName: 'API_KEY', value: safeEnv('API_KEY') },
-      { keyName: 'GEMINI_API_KEY', value: safeEnv('GEMINI_API_KEY') },
-      { keyName: 'VITE_GEMINI_API_KEY', value: safeEnv('VITE_GEMINI_API_KEY') },
-      { keyName: 'GEMINI2_API_KEY', value: safeEnv('GEMINI2_API_KEY') },
-      { keyName: 'Gemini2_API_KEY', value: safeEnv('Gemini2_API_KEY') }
-    ];
-    const kimiKey = { keyName: 'KIMI_API_KEY', value: safeEnv('KIMI_API_KEY') };
-    const aimlKey = { keyName: 'ML_API_KEY', value: safeEnv('ML_API_KEY') };
-
-    const allApiResults: ApiHealth[] = [];
-
-    addLog('🔎 Running Gemini key validations (3-key round-robin set)...');
-    for (const item of geminiKeys) {
-      if (!item.value) {
-        allApiResults.push({
-          keyName: item.keyName,
-          provider: 'gemini',
+    
+    // Check all providers
+    addLog('\n📋 Checking AI providers...');
+    const results: ApiHealth[] = [];
+    const providerStatus = getProviderStatus();
+    
+    for (const [provider, status] of Object.entries(providerStatus)) {
+      const key = safeEnv(PROVIDER_CONFIGS[provider as AIProvider].apiKeyEnv);
+      
+      if (!key) {
+        results.push({
+          keyName: PROVIDER_CONFIGS[provider as AIProvider].apiKeyEnv,
+          provider: provider as AIProvider,
           status: 'missing',
-          detail: 'Missing key value'
+          detail: 'Not configured'
         });
-        addLog(`❌ Gemini key ${item.keyName}: missing.`);
-        continue;
+        addLog(`  ⚪ ${status.name}: Not configured`);
+      } else {
+        addLog(`  🔍 ${status.name}: Testing...`);
+        const validation = await validateProviderKey(provider as AIProvider);
+        
+        results.push({
+          keyName: PROVIDER_CONFIGS[provider as AIProvider].apiKeyEnv,
+          provider: provider as AIProvider,
+          status: validation.ok ? 'healthy' : 'down',
+          detail: validation.detail
+        });
+        
+        addLog(`  ${validation.ok ? '✅' : '❌'} ${status.name}: ${validation.detail}`);
       }
-
-      addLog(`ℹ️ Gemini key ${item.keyName} (${maskKey(item.value)}): probing models/endpoints...`);
-      const report = await geminiValidateApiKey(item.value);
-      const firstSuccess = report.attempts.find(a => a.ok);
-
-      report.attempts.forEach((attempt, idx) => {
-        if (attempt.ok) {
-          addLog(`✅ [${item.keyName}] Attempt #${idx + 1}: model=${attempt.model}; endpoint=${attempt.baseUrl}; status=${attempt.status}`);
-        } else {
-          addLog(`❌ [${item.keyName}] Attempt #${idx + 1}: model=${attempt.model}; endpoint=${attempt.baseUrl}; status=${attempt.status || 'transport-error'}; details=${summarizeGeminiError(attempt.error)}`);
-        }
-      });
-
-      allApiResults.push({
-        keyName: item.keyName,
-        provider: 'gemini',
-        status: report.ok ? 'healthy' : 'down',
-        detail: report.ok && firstSuccess
-          ? `healthy via ${firstSuccess.model} @ ${firstSuccess.baseUrl}`
-          : 'all model/endpoint attempts failed'
-      });
     }
-
-    const activeGeminiKeys = geminiKeys.filter((k, idx, arr) => !!k.value && arr.findIndex(other => other.value === k.value) === idx);
-    if (activeGeminiKeys.length > 1) {
-      addLog(`🔁 Gemini Round-Robin Test: cycling ${activeGeminiKeys.length} configured keys...`);
-      for (let i = 0; i < activeGeminiKeys.length; i++) {
-        const current = activeGeminiKeys[i];
-        const probe = await geminiValidateApiKey(current.value, ['gemini-2.0-flash']);
-        addLog(
-          probe.ok
-            ? `✅ Round-Robin slot #${i + 1}: key=${current.keyName}; selected=gemini-2.0-flash; result=healthy.`
-            : `❌ Round-Robin slot #${i + 1}: key=${current.keyName}; selected=gemini-2.0-flash; result=down.`
-        );
-      }
-    } else {
-      addLog('⚠️ Gemini Round-Robin Test skipped: need at least 2 configured Gemini keys.');
-    }
-
-    if (!kimiKey.value) {
-      allApiResults.push({ keyName: kimiKey.keyName, provider: 'kimi', status: 'missing', detail: 'Missing key value' });
-      addLog('❌ KIMI_API_KEY: missing.');
-    } else {
-      addLog(`ℹ️ Kimi key ${kimiKey.keyName} (${maskKey(kimiKey.value)}): validating...`);
-      const kimi = await validateKimiKey(kimiKey.value);
-      allApiResults.push({ keyName: kimiKey.keyName, provider: 'kimi', status: kimi.ok ? 'healthy' : 'down', detail: kimi.detail });
-      addLog(kimi.ok ? `✅ Kimi validation passed: ${kimi.detail}` : `❌ Kimi validation failed: ${kimi.detail}`);
-    }
-
-    if (!aimlKey.value) {
-      allApiResults.push({ keyName: aimlKey.keyName, provider: 'aiml', status: 'missing', detail: 'Missing key value' });
-      addLog('❌ ML_API_KEY (AIML): missing.');
-    } else {
-      addLog(`ℹ️ AIML key ${aimlKey.keyName} (${maskKey(aimlKey.value)}): validating...`);
-      const aiml = await validateAimlKey(aimlKey.value);
-      allApiResults.push({ keyName: aimlKey.keyName, provider: 'aiml', status: aiml.ok ? 'healthy' : 'down', detail: aiml.detail });
-      addLog(aiml.ok ? `✅ AIML validation passed: ${aiml.detail}` : `❌ AIML validation failed: ${aiml.detail}`);
-    }
-
-    setApiHealth(allApiResults);
-
-    const geminiHealthy = allApiResults.some(r => r.provider === 'gemini' && r.status === 'healthy');
-    const nonGeminiHealthy = allApiResults
-      .filter(r => r.provider !== 'gemini')
-      .every(r => r.status === 'healthy');
-
-    setGeminiStatus(geminiHealthy ? 'ok' : 'error');
-
-    const healthy = dbHealthy && geminiHealthy && nonGeminiHealthy;
-    setOverallStatus(healthy ? 'ok' : 'error');
-    addLog(healthy ? '✅ Overall status: healthy.' : '❌ Overall status: degraded (check failed API keys/components).');
-
+    
+    setApiHealth(results);
+    
+    // Overall status
+    const hasHealthyApi = results.some(r => r.status === 'healthy');
+    const dbHealthy = dbStatus === 'ok';
+    setOverallStatus(hasHealthyApi ? 'ok' : 'error');
+    
+    addLog(`\n${hasHealthyApi ? '✅' : '❌'} Overall: ${hasHealthyApi ? 'Healthy' : 'Degraded - configure at least one AI provider'}`);
+    
     await scanTableIntegrity();
   };
 
-  useEffect(() => { runDiagnostics(); }, []);
+  useEffect(() => {
+    runDiagnostics();
+  }, []);
+
+  // Get provider icon
+  const getProviderIcon = (provider: AIProvider): string => {
+    switch (provider) {
+      case 'claude': return '🤖';
+      case 'openai': return '🟢';
+      case 'gemini': return '✨';
+      case 'kimi': return '🌙';
+      default: return '🔌';
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-[#f1f1f1]">
       <AdminSidebar onLogout={() => navigate('/login')} />
       <main className="flex-1 p-6 lg:p-10 max-w-7xl mx-auto w-full">
-        <header className="mb-10 flex justify-between items-end">
+        <header className="mb-8 flex justify-between items-end">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 font-serif">Diagnostics</h1>
-            <p className="text-gray-500 text-sm italic">Audit and fix database schema errors.</p>
+            <p className="text-gray-500 text-sm italic">Test AI providers and system health</p>
           </div>
-          <button
-            onClick={runRepair}
-            disabled={isRepairing}
-            className="bg-red-600 text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-red-700 disabled:opacity-50 transition-all shadow-lg active:scale-95"
-          >
-            {isRepairing ? 'Repairing...' : 'Supreme Repair 🛠️'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={resetProviders}
+              className="bg-amber-600 text-white px-3 py-2 rounded text-xs font-bold uppercase hover:bg-amber-700 transition-all"
+            >
+              Reset
+            </button>
+            <button
+              onClick={runRepair}
+              disabled={isRepairing}
+              className="bg-red-600 text-white px-3 py-2 rounded text-xs font-bold uppercase hover:bg-red-700 disabled:opacity-50"
+            >
+              {isRepairing ? 'Repairing...' : 'Repair DB'}
+            </button>
+          </div>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <div className="bg-white p-6 rounded shadow-sm border border-gray-200 text-center">
-            <h3 className="font-bold text-gray-800 text-sm uppercase">Supabase</h3>
-            <div className={`mt-2 text-[10px] font-black uppercase tracking-widest ${dbStatus === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{dbStatus}</div>
+        {/* Status Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-white p-4 rounded shadow text-center">
+            <h3 className="font-bold text-xs text-gray-600 uppercase">Database</h3>
+            <div className={`mt-2 text-sm font-black ${dbStatus === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
+              {dbStatus.toUpperCase()}
+            </div>
           </div>
-          <div className="bg-white p-6 rounded shadow-sm border border-gray-200 text-center">
-            <h3 className="font-bold text-gray-800 text-sm uppercase">Gemini</h3>
-            <div className={`mt-2 text-[10px] font-black uppercase tracking-widest ${geminiStatus === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{geminiStatus}</div>
+          <div className="bg-white p-4 rounded shadow text-center">
+            <h3 className="font-bold text-xs text-gray-600 uppercase">AI Providers</h3>
+            <div className="mt-2 text-sm font-black text-blue-600">
+              {getAvailableProviders().length} ACTIVE
+            </div>
           </div>
-          <div className="bg-white p-6 rounded shadow-sm border border-gray-200 text-center">
-            <h3 className="font-bold text-gray-800 text-sm uppercase">Overall</h3>
-            <div className={`mt-2 text-[10px] font-black uppercase tracking-widest ${overallStatus === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{overallStatus}</div>
+          <div className="bg-white p-4 rounded shadow text-center col-span-2">
+            <h3 className="font-bold text-xs text-gray-600 uppercase">Overall Status</h3>
+            <div className={`mt-2 text-sm font-black ${overallStatus === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
+              {overallStatus.toUpperCase()}
+            </div>
           </div>
         </div>
 
-        <div className="bg-white rounded shadow-sm border border-gray-200 overflow-hidden mb-8">
-          <div className="bg-gray-50 px-6 py-4 border-b">
-            <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">API Key Health (Healthy/Down)</h3>
+        {/* AI Provider Testing Section */}
+        <div className="bg-white rounded shadow mb-8 overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-4 flex justify-between items-center">
+            <h2 className="text-white font-bold uppercase text-sm">🧪 AI Provider Testing</h2>
+            <div className="flex gap-2">
+              <button
+                onClick={testRoundRobin}
+                className="bg-white/20 text-white px-3 py-1 rounded text-xs font-bold hover:bg-white/30"
+              >
+                Test Round-Robin
+              </button>
+              <button
+                onClick={testAllProviders}
+                disabled={isTestingAll}
+                className="bg-white text-blue-600 px-4 py-1 rounded text-xs font-bold hover:bg-blue-50 disabled:opacity-50"
+              >
+                {isTestingAll ? 'Testing...' : 'Test All APIs'}
+              </button>
+            </div>
+          </div>
+          
+          {/* Provider Status Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-gray-200">
+            {(Object.entries(PROVIDER_CONFIGS) as [AIProvider, typeof PROVIDER_CONFIGS[AIProvider]][]).map(([key, config]) => {
+              const health = apiHealth.find(h => h.provider === key);
+              const testResult = testResults.find(r => r.provider === key);
+              
+              return (
+                <div key={key} className="bg-white p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span>{getProviderIcon(key)}</span>
+                    <span className="font-bold text-sm">{config.name}</span>
+                  </div>
+                  
+                  <div className="text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Key:</span>
+                      <span className={`font-bold ${health?.status === 'missing' ? 'text-gray-400' : 'text-green-600'}`}>
+                        {health?.status === 'missing' ? 'Not Set' : 'Configured'}
+                      </span>
+                    </div>
+                    
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Status:</span>
+                      <span className={`font-bold ${
+                        health?.status === 'healthy' ? 'text-green-600' :
+                        health?.status === 'down' ? 'text-red-600' : 'text-gray-400'
+                      }`}>
+                        {health?.status === 'healthy' ? '✓ Working' :
+                         health?.status === 'down' ? '✗ Failed' : '—'}
+                      </span>
+                    </div>
+                    
+                    {testResult && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Test:</span>
+                        <span className={`font-bold ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                          {testResult.success ? `✓ ${testResult.latency}ms` : '✗ Failed'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          {/* Round-Robin Test Result */}
+          {roundRobinTest && (
+            <div className={`p-4 border-t ${roundRobinTest.success ? 'bg-green-50' : 'bg-red-50'}`}>
+              <div className="text-sm">
+                <span className="font-bold">Round-Robin Result:</span>
+                <span className="ml-2">
+                  {roundRobinTest.success 
+                    ? `✓ Routed to ${roundRobinTest.provider} (${roundRobinTest.model})`
+                    : `✗ ${roundRobinTest.error}`}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* API Key Details */}
+        <div className="bg-white rounded shadow mb-8 overflow-hidden">
+          <div className="bg-gray-50 px-6 py-3 border-b">
+            <h3 className="text-xs font-bold uppercase text-gray-500">API Key Configuration</h3>
           </div>
           <div className="divide-y">
             {apiHealth.map((row) => (
-              <div key={row.keyName} className="px-6 py-4 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-                <div className="text-sm font-bold text-gray-800">{row.keyName} <span className="text-[10px] text-gray-500 uppercase">({row.provider})</span></div>
-                <div className="text-xs text-gray-600">{row.detail}</div>
-                <div className={`text-[10px] font-black uppercase tracking-widest ${row.status === 'healthy' ? 'text-green-600' : row.status === 'missing' ? 'text-amber-600' : 'text-red-600'}`}>
-                  {row.status}
+              <div key={row.keyName} className="px-6 py-3 flex justify-between items-center">
+                <div>
+                  <span className="font-bold text-sm">{getProviderIcon(row.provider)} {row.keyName}</span>
+                  <span className="ml-2 text-xs text-gray-500">({PROVIDER_CONFIGS[row.provider].models[0]})</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-gray-600">{row.detail}</span>
+                  <span className={`text-xs font-bold uppercase ${
+                    row.status === 'healthy' ? 'text-green-600' :
+                    row.status === 'missing' ? 'text-gray-400' : 'text-red-600'
+                  }`}>
+                    {row.status}
+                  </span>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-          <div className="bg-white rounded shadow-sm border border-gray-200 overflow-hidden">
-            <div className="bg-gray-50 px-6 py-4 border-b">
-              <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">Integrity Report</h3>
+        {/* Database & Logs */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded shadow overflow-hidden">
+            <div className="bg-gray-50 px-6 py-3 border-b">
+              <h3 className="text-xs font-bold uppercase text-gray-500">Database Tables</h3>
             </div>
-            <div className="divide-y">
+            <div className="divide-y max-h-[400px] overflow-auto">
               {tableHealth.map((table) => (
-                <div key={table.name} className="px-6 py-4 flex items-center justify-between">
-                  <span className="text-sm font-bold text-gray-800">{table.name}</span>
-                  <span className={`w-2 h-2 rounded-full ${table.status === 'ok' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                <div key={table.name} className="px-6 py-2 flex justify-between items-center">
+                  <span className="text-sm">{table.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">{table.count} rows</span>
+                    <span className={`w-2 h-2 rounded-full ${table.status === 'ok' ? 'bg-green-500' : 'bg-red-500'}`} />
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="bg-gray-900 rounded shadow-2xl h-[550px] flex flex-col p-6 font-mono text-[11px] text-blue-300 overflow-y-auto">
+          <div className="bg-gray-900 rounded shadow p-4 font-mono text-xs text-green-400 h-[400px] overflow-auto">
             {logs.map((log, i) => <div key={i} className="mb-1">{log}</div>)}
-            {!logs.length && <div>Waiting for diagnostics output...</div>}
-            {isScanning && <div className="text-amber-300">Scanning tables...</div>}
+            {!logs.length && <div className="text-gray-500">Waiting for diagnostics...</div>}
+            {isScanning && <div className="text-amber-400 animate-pulse">Scanning...</div>}
+            {isTestingAll && <div className="text-blue-400 animate-pulse">Testing APIs...</div>}
           </div>
         </div>
       </main>

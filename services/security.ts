@@ -53,7 +53,7 @@ export const sanitizeHtml = (html: string): string => {
     .replace(/\s+on\w+="[^"]*"/g, "")
     .replace(/\s+on\w+='[^']*'/g, "")
     // Remove javascript: pseudo-protocol in links
-    .replace(/href\s*=\s*(['"])javascript:[^'"]*([\1])/gim, "href=$1#$2")
+    .replace(/href\s*=\s*(['"])javascript:[^'"]*\1/gim, "href=$1#$2")
     // Remove potentially dangerous tags unless they are from trusted media providers
     .replace(/<(meta|link|iframe|embed|object)\b[^>]*>/gim, (match) => {
       const lower = match.toLowerCase();

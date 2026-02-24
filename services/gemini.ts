@@ -1,42 +1,69 @@
 
-import { extractGeminiText, geminiGenerateContent } from "./geminiClient";
+import { generateArticleDraft, getAvailableProviders, ResearchResponse } from "./aiProviders";
 
-const MODEL_CANDIDATES = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
-
-export async function generateBlogPostDraft(topic: string) {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY;
+/**
+ * Generate a blog post draft using round-robin AI providers
+ * This function now supports multiple AI providers (Gemini, Moonshot KIMI, AI/ML API)
+ * and automatically rotates between them for load balancing.
+ */
+export async function generateBlogPostDraft(topic: string): Promise<string> {
+  // Check for available providers
+  const availableProviders = getAvailableProviders();
   
-  if (!apiKey || apiKey === '') {
-    const msg = "Gemini API key is missing or empty. Verify Vercel Env Variables.";
+  if (availableProviders.length === 0) {
+    const msg = "No AI providers configured. Please set at least one API key:\n" +
+      "- VITE_GEMINI_API_KEY (Google Gemini)\n" +
+      "- VITE_MOONSHOT_API_KEY (Moonshot KIMI)\n" +
+      "- VITE_AIML_API_KEY (AI/ML API)";
     console.error(msg);
     return msg;
   }
 
-  // Debug: Log key format (not value)
-  console.debug(`Gemini Request starting with key length: ${apiKey.length}`);
+  console.debug(`[Blog Draft] Available AI providers: ${availableProviders.join(', ')}`);
 
   try {
-    const response = await geminiGenerateContent(
-      apiKey,
-      {
-        contents: [{ role: 'user', parts: [{ text: `Write a high-quality blog post draft about: ${topic}. 
-          Include a title, engaging paragraphs, and a conclusion. 
-          Format with basic HTML like <h2> and <p>.` }] }]
-      },
-      MODEL_CANDIDATES
-    );
+    const response: ResearchResponse = await generateArticleDraft({
+      topic,
+      style: 'Engaging blog post with professional tone',
+      wordCount: 1000
+    });
 
-    const text = extractGeminiText(response);
-    if (!text) throw new Error('Received empty response from Gemini API.');
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to generate content');
+    }
 
-    return text;
-  } catch (error: any) {
-    console.error("Gemini SDK Exception:", error);
+    console.log(`[Blog Draft] Generated using ${response.provider} (${response.model})`);
     
-    if (error.message?.includes('Failed to fetch')) {
-      return "Network Error: The request to Google Gemini was blocked by the browser. Please disable AdBlockers or check your Content Security Policy.";
+    if (response.usage) {
+      console.log(`[Blog Draft] Token usage - Prompt: ${response.usage.promptTokens}, Completion: ${response.usage.completionTokens}`);
+    }
+
+    return response.content;
+    
+  } catch (error: any) {
+    console.error("AI Generation Exception:", error);
+    
+    if (error.message?.includes('Failed to fetch') || error.message?.includes('Network')) {
+      return "Network Error: The request was blocked. Please check your network connection, disable AdBlockers, or verify Content Security Policy settings.";
     }
     
-    return `Gemini AI error: ${error.message || "Unknown error occurred"}`;
+    return `AI Generation error: ${error.message || "Unknown error occurred"}`;
   }
+}
+
+/**
+ * Generate a blog post draft with custom options
+ */
+export async function generateBlogPostDraftWithOptions(options: {
+  topic: string;
+  style?: string;
+  wordCount?: number;
+  systemPrompt?: string;
+}): Promise<ResearchResponse> {
+  return generateArticleDraft({
+    topic: options.topic,
+    style: options.style,
+    wordCount: options.wordCount || 1000,
+    systemPrompt: options.systemPrompt
+  });
 }

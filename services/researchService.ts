@@ -90,11 +90,11 @@ async function researchWithGemini(query: string): Promise<ResearchResult[]> {
 
   // Try different models in order of stability
   const models = ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-3-flash-preview'];
+  const ai = new GoogleGenAI({ apiKey });
   
   for (const model of models) {
     console.log(`[Research Service] 📡 Requesting Gemini (${model})...`);
     try {
-      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: model,
         contents: `Fetch and summarize 5 major news topics or articles regarding: "${query}". Return as a JSON array of objects with "title" and "summary" fields.`,

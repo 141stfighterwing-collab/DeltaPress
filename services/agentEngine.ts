@@ -146,7 +146,12 @@ export const checkAndRunDueAgents = async (
     if (onStepUpdate) onStepUpdate(`Successfully dispatched.`, 100);
 
   } catch (err: any) {
-    console.error("Agent Engine Error:", err);
-    if (onStepUpdate) onStepUpdate(`Error: ${err.message || 'Operation failed'}`, 0);
+    console.error("Agent Engine ❌ CRITICAL FAILURE:", err);
+    if (onStepUpdate) onStepUpdate(`Error: ${err.message || 'Operation failed'}. Check console for stack trace.`, 0);
+    
+    // Log more details if it's a Supabase error
+    if (err.code) {
+      console.error(`Supabase Error Code: ${err.code}, Message: ${err.message}`);
+    }
   }
 };

@@ -185,10 +185,11 @@ const DiagnosticsView: React.FC = () => {
     Object.entries(keys).forEach(([id, val]) => {
       if (val && val.length > 5) {
         newKeyStatus[id] = 'ok';
-        addLog(`✅ Research Key ${id}: Present.`);
+        addLog(`✅ Research Key ${id}: Present (${val.substring(0, 4)}...${val.substring(val.length - 4)}).`);
       } else {
         newKeyStatus[id] = 'error';
-        addLog(`⚠️ Research Key ${id}: Missing or invalid.`);
+        addLog(`⚠️ Research Key ${id}: Missing or invalid. Check your .env or Vite config.`);
+        console.error(`[Diagnostics] Key ${id} is missing or too short. Value:`, val);
       }
     });
     setResearchKeysStatus(newKeyStatus);

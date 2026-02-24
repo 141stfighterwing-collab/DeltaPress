@@ -23,8 +23,8 @@ export default defineConfig(({ mode }) => {
       // Direct string replacement for process.env access
       'process.env.GEMINI_API_KEY': JSON.stringify(apiKey || env.GEMINI_API_KEY || ""),
       'process.env.KIMI_API_KEY': JSON.stringify(env.KIMI_API_KEY || ""),
-      'process.env.ZAI_API_KEY': JSON.stringify(env.ZAI_API_KEY || ""),
-      'process.env.ML_API_KEY': JSON.stringify(env.ML_API_KEY || ""),
+      'process.env.ZAI_API_KEY': JSON.stringify(env.ZAI_API_KEY || "5b5c16c8ac6d432d9ed00a905a436579.qss0dz2gAYUgLc2J"),
+      'process.env.ML_API_KEY': JSON.stringify(env.ML_API_KEY || "1577bbafa0a54b5598fa6d1d0721a071"),
       'process.env.NEXT_PUBLIC_SUPABASE_URL': JSON.stringify(supabaseUrl),
       'process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY': JSON.stringify(supabaseKey),
       
@@ -32,8 +32,8 @@ export default defineConfig(({ mode }) => {
       'process.env': JSON.stringify({
         GEMINI_API_KEY: apiKey || env.GEMINI_API_KEY || "",
         KIMI_API_KEY: env.KIMI_API_KEY || "",
-        ZAI_API_KEY: env.ZAI_API_KEY || "",
-        ML_API_KEY: env.ML_API_KEY || "",
+        ZAI_API_KEY: env.ZAI_API_KEY || "5b5c16c8ac6d432d9ed00a905a436579.qss0dz2gAYUgLc2J",
+        ML_API_KEY: env.ML_API_KEY || "1577bbafa0a54b5598fa6d1d0721a071",
         NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: supabaseKey,
         NODE_ENV: mode

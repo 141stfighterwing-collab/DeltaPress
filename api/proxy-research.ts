@@ -31,12 +31,12 @@ export default async function handler(req: any, res: any) {
                 return res.status(500).json({ error: 'Gemini API key not configured on server' });
             }
 
-            console.log(`[Proxy] Using Gemini model: ${model || 'gemini-2.0-flash-exp'}`);
+            console.log(`[Proxy] Using Gemini model: ${model || 'gemini-2.0-flash'}`);
 
             const ai = new GoogleGenAI({ apiKey });
 
             const response = await ai.models.generateContent({
-                model: model || 'gemini-2.0-flash-exp',
+                model: model || 'gemini-2.0-flash',
                 contents: `Fetch and summarize 5 major news topics or articles regarding: "${query}". Return as a JSON array of objects with "title" and "summary" fields.`,
                 config: {
                     tools: [{ googleSearch: {} }],
@@ -59,15 +59,20 @@ export default async function handler(req: any, res: any) {
             let targetEndpoint = endpoint;
             let targetKey = '';
 
+            let defaultModel = '';
+
             if (provider === 'KIMI') {
                 targetEndpoint = 'https://api.moonshot.cn/v1/chat/completions';
-                targetKey = process.env.KIMI_API_KEY || '';
+                targetKey = process.env.KIMI_API_KEY || process.env.VITE_KIMI_API_KEY || '';
+                defaultModel = 'moonshot-v1-8k';
             } else if (provider === 'ZAI') {
                 targetEndpoint = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-                targetKey = process.env.ZAI_API_KEY || '';
+                targetKey = process.env.ZAI_API_KEY || process.env.VITE_ZAI_API_KEY || '';
+                defaultModel = 'glm-4';
             } else if (provider === 'ML') {
                 targetEndpoint = 'https://api.aimlapi.com/chat/completions';
-                targetKey = process.env.ML_API_KEY || '';
+                targetKey = process.env.ML_API_KEY || process.env.VITE_ML_API_KEY || '';
+                defaultModel = 'gpt-4o';
             }
 
             if (!targetEndpoint) {
@@ -88,7 +93,7 @@ export default async function handler(req: any, res: any) {
                     'Authorization': `Bearer ${targetKey}`
                 },
                 body: JSON.stringify({
-                    model: model,
+                    model: model || defaultModel,
                     messages: [
                         {
                             role: 'system',

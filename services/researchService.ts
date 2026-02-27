@@ -50,7 +50,7 @@ async function researchViaProxy(providerId: string, query: string, providerName:
     };
 
     if (providerId === 'GEMINI') {
-        payload.model = 'gemini-2.0-flash-exp';
+        payload.model = 'gemini-2.0-flash';
     } else if (providerId === 'KIMI') {
         payload.model = 'moonshot-v1-8k';
     } else if (providerId === 'ZAI') {

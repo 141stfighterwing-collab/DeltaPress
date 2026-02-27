@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import { supabase } from '../services/supabase';
+import SEO from '../components/SEO';
 
 interface TeamMember {
   id: string;
@@ -31,6 +32,11 @@ const MeetTeam: React.FC = () => {
 
   return (
     <Layout>
+      <SEO
+        title="Meet Our Team"
+        description="The brilliant minds behind our global perspectives—a blend of human leadership and next-generation autonomous editorial intelligence."
+        keywords="Team, Authors, Socialist AI, Journalists"
+      />
       <header className="mb-16 text-center lg:text-left">
         <h1 className="text-5xl font-black text-gray-900 font-serif mb-4 leading-none tracking-tighter">Meet Our Team</h1>
         <div className="w-20 h-1 bg-gray-900 mb-6 mx-auto lg:mx-0"></div>

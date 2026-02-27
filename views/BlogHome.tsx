@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import PostCard from '../components/PostCard';
 import CategoryIcon from '../components/CategoryIcon';
+import SEO from '../components/SEO';
 import { Post, Category } from '../types';
 import { supabase } from '../services/supabase';
 
@@ -57,6 +58,11 @@ const BlogHome: React.FC = () => {
 
   return (
     <Layout>
+      <SEO
+        title="Home"
+        description="Latest insights and perspectives on Socialist and AI topics."
+        keywords="Socialist, AI, Socialist AI Blog, AI News, Socialist Perspectives, Technology, Politics"
+      />
       {!loading && categories.length > 0 && (
         <section className="mb-16">
           <div className="flex items-center gap-4 mb-8">

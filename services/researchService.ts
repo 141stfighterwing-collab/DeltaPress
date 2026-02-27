@@ -8,7 +8,8 @@ const PROVIDERS = [
   { id: 'GEMINI', name: 'Google Gemini' },
   { id: 'KIMI', name: 'Moonshot Kimi' },
   { id: 'ZAI', name: 'Zhipu AI' },
-  { id: 'ML', name: 'AI/ML API' }
+  { id: 'ML', name: 'AI/ML API' },
+  { id: 'CHATGPT', name: 'ChatGPT' }
 ];
 
 let rotationIndex = 0;

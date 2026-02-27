@@ -68,6 +68,10 @@ app.post('/api/proxy-research', async (req, res) => {
                 targetEndpoint = 'https://api.aimlapi.com/chat/completions';
                 targetKey = process.env.ML_API_KEY || process.env.VITE_ML_API_KEY || '';
                 defaultModel = 'gpt-4o';
+            } else if (provider === 'CHATGPT') {
+                targetEndpoint = 'https://api.openai.com/v1/chat/completions';
+                targetKey = process.env.CHATGPT_API || process.env.VITE_CHATGPT_API || '';
+                defaultModel = 'gpt-4o-mini';
             }
 
             if (!targetEndpoint) {

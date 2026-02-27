@@ -1,6 +1,7 @@
 
 import React, { useEffect } from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import { startHeartbeat } from './services/analytics';
 import BlogHome from './views/BlogHome';
 import SinglePost from './views/SinglePost';
@@ -30,9 +31,10 @@ const App: React.FC = () => {
   }, []);
 
   return (
-    <HashRouter>
-      <Routes>
-        {/* Public Routes */}
+    <HelmetProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public Routes */}
         <Route path="/" element={<BlogHome />} />
         <Route path="/post/:slug" element={<SinglePost />} />
         <Route path="/news" element={<Newsroom />} />
@@ -64,12 +66,13 @@ const App: React.FC = () => {
         <Route path="/admin/messages" element={<GenericListView title="Messages" table="contacts" />} />
         <Route path="/admin/services" element={<GenericListView title="Services" table="services" />} />
         <Route path="/admin/partners" element={<GenericListView title="Partners" table="partners" />} />
-        <Route path="/admin/plugins" element={<GenericListView title="Plugins" table="plugins" />} />
-        <Route path="/admin/tools" element={<GenericListView title="Tools" table="tools" />} />
+          <Route path="/admin/plugins" element={<GenericListView title="Plugins" table="plugins" />} />
+          <Route path="/admin/tools" element={<GenericListView title="Tools" table="tools" />} />
 
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </HashRouter>
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </BrowserRouter>
+    </HelmetProvider>
   );
 };
 

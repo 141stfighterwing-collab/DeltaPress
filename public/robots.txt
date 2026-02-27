@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://twenty-ten-blog.app/sitemap.xml

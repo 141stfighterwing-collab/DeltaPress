@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { supabase } from '../services/supabase';
 import { trackEvent } from '../services/analytics';
+import SEO from '../components/SEO';
 
 interface RssArticle {
   title: string;
@@ -85,6 +86,11 @@ const Newsroom: React.FC = () => {
 
   return (
     <Layout>
+      <SEO
+        title="Newsroom"
+        description="Global perspectives aggregated from your configured sources."
+        keywords="Socialist News, AI News, Global Pulse, Technology Updates, Political Developments"
+      />
       <header className="mb-12 border-b border-gray-100 pb-6 flex justify-between items-end">
         <div>
           <h1 className="text-4xl font-bold text-gray-900 font-serif mb-2">Newsroom</h1>

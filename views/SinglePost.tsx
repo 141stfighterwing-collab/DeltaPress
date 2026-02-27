@@ -6,6 +6,7 @@ import { supabase } from '../services/supabase';
 import { trackEvent } from '../services/analytics';
 import { sanitizeHtml, stripAllHtml, isValidEmail, LIMITS, normalizeYouTubeEmbeds } from '../services/security';
 import CategoryIcon from '../components/CategoryIcon';
+import SEO from '../components/SEO';
 
 const SinglePost: React.FC = () => {
   const { slug } = useParams();
@@ -102,8 +103,16 @@ const SinglePost: React.FC = () => {
   if (loading) return <Layout><div className="py-20 text-center text-gray-400 font-serif italic">Loading entry...</div></Layout>;
   if (!post) return <Layout><div className="py-20 text-center font-serif italic text-gray-400">Not found.</div></Layout>;
 
+  const plainExcerpt = post.excerpt ? stripAllHtml(post.excerpt) : stripAllHtml(post.content).substring(0, 160) + '...';
+
   return (
     <Layout>
+      <SEO
+        title={post.title}
+        description={plainExcerpt}
+        type="article"
+        image={post.featured_image}
+      />
       <article>
         <header className="mb-4">
           <h1 className="text-3xl lg:text-5xl font-black mb-2 text-gray-900 leading-tight font-serif">{post.title}</h1>

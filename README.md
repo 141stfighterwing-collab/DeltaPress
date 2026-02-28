@@ -23,6 +23,7 @@ This project features a robust modern web architecture:
 *   **AI Fallback:** Configured multi-provider fallback strategy in `services/researchService.ts`.
 *   **Security:** Integrated DOMPurify for secure rendering of AI content.
 *   **Vercel Deployment:** Added serverless functions in the `api/` directory for production deployment.
+*   **Diagnostics Update:** Added functionality to the Admin Diagnostics view to actively test AI API rate limits by sending generic test messages directly to the providers via the `/api/proxy-research` endpoint.
 
 ## Docs
 

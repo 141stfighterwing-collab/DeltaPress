@@ -48,8 +48,8 @@ const SPECTRUM_LABELS: Record<number, string> = {
 };
 
 const DEFAULT_AVATAR_URLS = {
-  male: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop',
-  female: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop'
+  male: '/images/male-1.jpg',
+  female: '/images/female-1.jpg'
 };
 
 const JournalistsView: React.FC = () => {

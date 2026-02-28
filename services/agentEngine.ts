@@ -35,31 +35,42 @@ export const checkAndRunDueAgents = async (
   if (!apiKey) return;
 
   try {
-    // 1. Fetch active journalists
-    const { data: bots } = await supabase.from('journalists').select('*').eq('status', 'active');
-    if (!bots || bots.length === 0) return;
-
     const now = new Date();
 
-    // 2. Determine which bot to run
-    let botToRun = null;
+    // 1 & 2. Fetch and determine which bot to run directly via database query
+    let query = supabase.from('journalists').select('*').eq('status', 'active');
+
     if (targetBotId) {
-      botToRun = bots.find(b => b.id === targetBotId);
+      query = query.eq('id', targetBotId);
     } else {
-      botToRun = bots.find(bot => {
-        if (!bot.last_run) return true;
-        const freq = FREQUENCIES.find(f => f.id === bot.schedule) || { hours: 24 };
-        const nextRun = new Date(new Date(bot.last_run).getTime() + freq.hours * 60 * 60 * 1000);
-        return nextRun <= now;
+      // Build the OR query for scheduling conditions based on FREQUENCIES
+      const scheduleConditions = FREQUENCIES.map(freq => {
+        const threshold = new Date(now.getTime() - freq.hours * 60 * 60 * 1000).toISOString();
+        return `and(schedule.eq.${freq.id},last_run.lte.${threshold})`;
       });
+
+      const defaultThreshold = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+      const knownIds = FREQUENCIES.map(f => `"${f.id}"`).join(',');
+
+      // Fallback: If schedule is not recognized OR is null, default to 24h threshold
+      const fallbackCondition = `and(or(schedule.not.in.(${knownIds}),schedule.is.null),last_run.lte.${defaultThreshold})`;
+
+      const orQuery = `last_run.is.null,${scheduleConditions.join(',')},${fallbackCondition}`;
+
+      query = query.or(orQuery);
     }
 
-    if (!botToRun) {
+    // Limit to 1 since we only process one agent per run
+    query = query.limit(1);
+
+    const { data: bots } = await query;
+
+    if (!bots || bots.length === 0) {
       console.log("Agent Engine: No due agents and no force target found.");
       return;
     }
 
-    const dueBot = botToRun; // Local reference for TS
+    const dueBot = bots[0]; // Local reference for TS
 
     // 3. Start Deployment Sequence
     if (onStepUpdate) onStepUpdate(`Initializing ${dueBot.name}...`, 5);

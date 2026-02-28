@@ -29,8 +29,8 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
           setAuthorInfo({
             name: bot.name,
             avatar: bot.avatar_url || (bot.gender === 'male' 
-              ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop' 
-              : 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop')
+              ? '/images/male-1.jpg'
+              : '/images/female-1.jpg')
           });
         }
       }
@@ -78,7 +78,7 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
                       src={authorInfo.avatar} 
                       alt={authorInfo.name} 
                       className="w-full h-full object-cover" 
-                      onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop'; }}
+                      onError={(e) => { (e.target as HTMLImageElement).src = '/images/male-2.jpg'; }}
                     />
                   </div>
                   <span className="text-[#1d2327] font-black">{authorInfo.name}</span>

@@ -51,8 +51,8 @@ const SinglePost: React.FC = () => {
                 setAuthorInfo({
                     name: bot.name,
                     avatar: bot.avatar_url || (bot.gender === 'male' 
-                    ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop' 
-                    : 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop')
+                    ? '/images/male-1.jpg'
+                    : '/images/female-1.jpg')
                 });
             }
         }

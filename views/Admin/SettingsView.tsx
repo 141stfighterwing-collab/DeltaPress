@@ -6,9 +6,9 @@ import { stripAllHtml, isValidUrl } from '../../services/security';
 import AdminSidebar from '../../components/AdminSidebar';
 
 const DEFAULT_HEADERS = [
-  { url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=1200&auto=format&fit=crop', name: 'Pine Forest' },
-  { url: 'https://images.unsplash.com/photo-1488459736882-d7922596f733?q=80&w=1200&auto=format&fit=crop', name: 'Berries' },
-  { url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1200&auto=format&fit=crop', name: 'Ocean' }
+  { url: '/images/pine-forest.jpg', name: 'Pine Forest' },
+  { url: '/images/berries.jpg', name: 'Berries' },
+  { url: '/images/ocean.jpg', name: 'Ocean' }
 ];
 
 const SettingsView: React.FC = () => {

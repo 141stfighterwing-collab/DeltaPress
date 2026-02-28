@@ -52,7 +52,7 @@ const MeetTeam: React.FC = () => {
         </div>
         <div className="flex flex-col lg:flex-row items-center gap-12 relative z-10">
           <div className="w-48 h-48 lg:w-64 lg:h-64 rounded-full overflow-hidden border-8 border-white/10 shadow-2xl grayscale group-hover:grayscale-0 transition-all duration-700">
-             <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop" alt="Socialist Nate" className="w-full h-full object-cover" />
+             <img src="/images/nate.jpg" alt="Socialist Nate" className="w-full h-full object-cover" />
           </div>
           <div className="flex-1 text-center lg:text-left">
              <span className="text-blue-400 text-[10px] font-black uppercase tracking-[0.4em] mb-2 block">The Founder</span>
@@ -84,7 +84,7 @@ const MeetTeam: React.FC = () => {
               <div key={member.id} className="group">
                 <div className="aspect-square rounded-sm overflow-hidden mb-6 shadow-md border border-gray-100 relative bg-gray-50">
                    <img 
-                    src={member.avatar_url || (member.gender === 'male' ? 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop' : 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&h=400&fit=crop')} 
+                    src={member.avatar_url || (member.gender === 'male' ? '/images/male-2.jpg' : '/images/female-2.jpg')}
                     alt={member.name} 
                     className="w-full h-full object-cover grayscale-[0.3] group-hover:grayscale-0 transition-all duration-500" 
                    />

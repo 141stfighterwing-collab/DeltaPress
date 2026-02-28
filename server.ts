@@ -3,6 +3,13 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 
+const ALLOWED_ENDPOINTS = [
+    'https://api.moonshot.cn/v1/chat/completions',
+    'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+    'https://api.aimlapi.com/chat/completions',
+    'https://api.openai.com/v1/chat/completions'
+];
+
 dotenv.config();
 
 const app = express();
@@ -51,6 +58,10 @@ app.post('/api/proxy-research', async (req, res) => {
 
         } else {
             // Handle OpenAI compatible providers (Kimi, Zhipu, AI/ML)
+            if (endpoint && !ALLOWED_ENDPOINTS.includes(endpoint)) {
+                console.error(`[Proxy] Blocked unauthorized endpoint: ${endpoint}`);
+                return res.status(403).json({ error: 'Unauthorized endpoint provided' });
+            }
             let targetEndpoint = endpoint;
             let targetKey = '';
 

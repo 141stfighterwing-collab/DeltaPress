@@ -14,13 +14,14 @@ interface TableHealth {
 
 const DiagnosticsView: React.FC = () => {
   const navigate = useNavigate();
-  const [geminiStatus, setGeminiStatus] = useState<'pending' | 'ok' | 'error'>('pending');
-  const [dbStatus, setDbStatus] = useState<'pending' | 'ok' | 'error'>('pending');
-  const [rssStatus, setRssStatus] = useState<'pending' | 'ok' | 'error'>('pending');
-  const [researchKeysStatus, setResearchKeysStatus] = useState<Record<string, 'ok' | 'error' | 'pending'>>({
+  const [geminiStatus, setGeminiStatus] = useState<string>('pending');
+  const [dbStatus, setDbStatus] = useState<string>('pending');
+  const [rssStatus, setRssStatus] = useState<string>('pending');
+  const [researchKeysStatus, setResearchKeysStatus] = useState<Record<string, string>>({
     KIMI: 'pending',
     ZAI: 'pending',
-    ML: 'pending'
+    ML: 'pending',
+    CHATGPT: 'pending'
   });
   const [tableHealth, setTableHealth] = useState<TableHealth[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
@@ -165,33 +166,59 @@ const DiagnosticsView: React.FC = () => {
       addLog(`❌ Supabase Error: ${err.message}`);
     }
 
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) {
-      addLog("❌ CRITICAL: GEMINI_API_KEY is missing.");
-      setGeminiStatus('error');
-    } else {
-      setGeminiStatus('ok');
-      addLog("✅ Gemini AI: Connected.");
+    const testProviders = ['GEMINI', 'KIMI', 'ZAI', 'ML', 'CHATGPT'];
+    const newKeyStatus: Record<string, string> = { ...researchKeysStatus };
+
+    for (const provider of testProviders) {
+      try {
+        const response = await fetch('/api/proxy-research', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider,
+            message: "Hi AI it's me wwordpress like app saying hi to test functionality."
+          })
+        });
+
+        if (response.ok) {
+          if (provider === 'GEMINI') {
+            setGeminiStatus('ok');
+            addLog("✅ Gemini AI: Connected and Responding.");
+          } else {
+            newKeyStatus[provider] = 'ok';
+            addLog(`✅ Research API ${provider}: Connected and Responding.`);
+          }
+        } else {
+          const errText = await response.text();
+          if (response.status === 429 || errText.toLowerCase().includes('429') || errText.toLowerCase().includes('quota') || errText.toLowerCase().includes('rate limit')) {
+            if (provider === 'GEMINI') {
+              setGeminiStatus('API Limited');
+              addLog(`⚠️ Gemini AI: API Rate Limited or Quota Exceeded.`);
+            } else {
+              newKeyStatus[provider] = 'API Limited';
+              addLog(`⚠️ Research API ${provider}: API Rate Limited or Quota Exceeded.`);
+            }
+          } else {
+             if (provider === 'GEMINI') {
+              setGeminiStatus('error');
+              addLog(`❌ Gemini AI: Connection Error. ${errText}`);
+            } else {
+              newKeyStatus[provider] = 'error';
+              addLog(`❌ Research API ${provider}: Connection Error. ${errText}`);
+            }
+          }
+        }
+      } catch (e: any) {
+        if (provider === 'GEMINI') {
+          setGeminiStatus('error');
+          addLog(`❌ Gemini AI: Connection Failed. ${e.message}`);
+        } else {
+          newKeyStatus[provider] = 'error';
+          addLog(`❌ Research API ${provider}: Connection Failed. ${e.message}`);
+        }
+      }
     }
 
-    // Check Research Keys
-    const keys = {
-      KIMI: process.env.KIMI_API_KEY,
-      ZAI: process.env.ZAI_API_KEY,
-      ML: process.env.ML_API_KEY
-    };
-
-    const newKeyStatus: any = {};
-    Object.entries(keys).forEach(([id, val]) => {
-      if (val && val.length > 5) {
-        newKeyStatus[id] = 'ok';
-        addLog(`✅ Research Key ${id}: Present (${val.substring(0, 4)}...${val.substring(val.length - 4)}).`);
-      } else {
-        newKeyStatus[id] = 'error';
-        addLog(`⚠️ Research Key ${id}: Missing or invalid. Check your .env or Vite config.`);
-        console.error(`[Diagnostics] Key ${id} is missing or too short. Value:`, val);
-      }
-    });
     setResearchKeysStatus(newKeyStatus);
 
     await scanTableIntegrity();
@@ -220,15 +247,15 @@ const DiagnosticsView: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
           <div className="bg-white p-6 rounded shadow-sm border border-gray-200 text-center">
             <h3 className="font-bold text-gray-800 text-sm uppercase">Supabase</h3>
-            <div className={`mt-2 text-[10px] font-black uppercase tracking-widest ${dbStatus === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{dbStatus}</div>
+            <div className={`mt-2 text-[10px] font-black uppercase tracking-widest ${dbStatus === 'ok' ? 'text-green-600' : (dbStatus === 'API Limited' ? 'text-yellow-500' : 'text-red-600')}`}>{dbStatus}</div>
           </div>
           <div className="bg-white p-6 rounded shadow-sm border border-gray-200 text-center">
             <h3 className="font-bold text-gray-800 text-sm uppercase">Gemini</h3>
-            <div className={`mt-2 text-[10px] font-black uppercase tracking-widest ${geminiStatus === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{geminiStatus}</div>
+            <div className={`mt-2 text-[10px] font-black uppercase tracking-widest ${geminiStatus === 'ok' ? 'text-green-600' : (geminiStatus === 'API Limited' ? 'text-yellow-500' : 'text-red-600')}`}>{geminiStatus}</div>
           </div>
           <div className="bg-white p-6 rounded shadow-sm border border-gray-200 text-center">
             <h3 className="font-bold text-gray-800 text-sm uppercase">Status</h3>
-            <div className={`mt-2 text-[10px] font-black uppercase tracking-widest ${rssStatus === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{rssStatus}</div>
+            <div className={`mt-2 text-[10px] font-black uppercase tracking-widest ${rssStatus === 'ok' ? 'text-green-600' : (rssStatus === 'API Limited' ? 'text-yellow-500' : 'text-red-600')}`}>{rssStatus}</div>
           </div>
         </div>
 
@@ -236,7 +263,7 @@ const DiagnosticsView: React.FC = () => {
           {Object.entries(researchKeysStatus).map(([id, status]) => (
             <div key={id} className="bg-white p-6 rounded shadow-sm border border-gray-200 text-center">
               <h3 className="font-bold text-gray-800 text-sm uppercase">{id} Research</h3>
-              <div className={`mt-2 text-[10px] font-black uppercase tracking-widest ${status === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{status}</div>
+              <div className={`mt-2 text-[10px] font-black uppercase tracking-widest ${status === 'ok' ? 'text-green-600' : (status === 'API Limited' ? 'text-yellow-500' : 'text-red-600')}`}>{status}</div>
             </div>
           ))}
         </div>

@@ -19,7 +19,7 @@ export default async function handler(req: any, res: any) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { provider, query, model, endpoint } = req.body;
+    const { provider, query, model, endpoint, message } = req.body;
 
     console.log(`[Proxy] Request for provider: ${provider}, model: ${model}, endpoint: ${endpoint}`);
 
@@ -35,14 +35,22 @@ export default async function handler(req: any, res: any) {
 
             const ai = new GoogleGenAI({ apiKey });
 
-            const response = await ai.models.generateContent({
-                model: model || 'gemini-2.0-flash',
-                contents: `Fetch and summarize 5 major news topics or articles regarding: "${query}". Return as a JSON array of objects with "title" and "summary" fields.`,
-                config: {
-                    tools: [{ googleSearch: {} }],
-                    responseMimeType: "application/json"
-                }
-            });
+            let response;
+            if (message) {
+                response = await ai.models.generateContent({
+                    model: model || 'gemini-2.0-flash',
+                    contents: message,
+                });
+            } else {
+                response = await ai.models.generateContent({
+                    model: model || 'gemini-2.0-flash',
+                    contents: `Fetch and summarize 5 major news topics or articles regarding: "${query}". Return as a JSON array of objects with "title" and "summary" fields.`,
+                    config: {
+                        tools: [{ googleSearch: {} }],
+                        responseMimeType: "application/json"
+                    }
+                });
+            }
 
             const text = response.text || '[]';
 
@@ -90,6 +98,27 @@ export default async function handler(req: any, res: any) {
 
             console.log(`[Proxy] Forwarding to ${targetEndpoint}`);
 
+            let messagesPayload = [];
+            if (message) {
+                messagesPayload = [
+                    {
+                        role: 'user',
+                        content: message
+                    }
+                ];
+            } else {
+                messagesPayload = [
+                    {
+                        role: 'system',
+                        content: 'You are a research assistant. Provide a list of 5 current news topics or facts about the requested subject. Return ONLY a JSON array of objects with "title" and "summary" fields. No markdown wrappers.'
+                    },
+                    {
+                        role: 'user',
+                        content: `Research: ${query}`
+                    }
+                ];
+            }
+
             const response = await fetch(targetEndpoint, {
                 method: 'POST',
                 headers: {
@@ -98,16 +127,7 @@ export default async function handler(req: any, res: any) {
                 },
                 body: JSON.stringify({
                     model: model || defaultModel,
-                    messages: [
-                        {
-                            role: 'system',
-                            content: 'You are a research assistant. Provide a list of 5 current news topics or facts about the requested subject. Return ONLY a JSON array of objects with "title" and "summary" fields. No markdown wrappers.'
-                        },
-                        {
-                            role: 'user',
-                            content: `Research: ${query}`
-                        }
-                    ],
+                    messages: messagesPayload,
                     temperature: 0.3
                 })
             });

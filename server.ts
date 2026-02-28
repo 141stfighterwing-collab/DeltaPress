@@ -12,7 +12,7 @@ app.use(cors());
 app.use(express.json());
 
 app.post('/api/proxy-research', async (req, res) => {
-    const { provider, query, model, endpoint } = req.body;
+    const { provider, query, model, endpoint, message } = req.body;
 
     console.log(`[Proxy] Request for provider: ${provider}, model: ${model}, endpoint: ${endpoint}`);
 
@@ -29,14 +29,22 @@ app.post('/api/proxy-research', async (req, res) => {
             const ai = new GoogleGenAI({ apiKey });
             // Using the model ID directly
             // Note: The structure might vary based on the SDK version, this matches the user's service file usage
-            const response = await ai.models.generateContent({
-                model: model || 'gemini-2.0-flash',
-                contents: `Fetch and summarize 5 major news topics or articles regarding: "${query}". Return as a JSON array of objects with "title" and "summary" fields.`,
-                config: {
-                    tools: [{ googleSearch: {} }],
-                    responseMimeType: "application/json"
-                }
-            });
+            let response;
+            if (message) {
+                response = await ai.models.generateContent({
+                    model: model || 'gemini-2.0-flash',
+                    contents: message,
+                });
+            } else {
+                response = await ai.models.generateContent({
+                    model: model || 'gemini-2.0-flash',
+                    contents: `Fetch and summarize 5 major news topics or articles regarding: "${query}". Return as a JSON array of objects with "title" and "summary" fields.`,
+                    config: {
+                        tools: [{ googleSearch: {} }],
+                        responseMimeType: "application/json"
+                    }
+                });
+            }
 
             // The SDK returns text directly via a getter in the latest version
             const text = response.text || '[]';
@@ -85,6 +93,27 @@ app.post('/api/proxy-research', async (req, res) => {
 
             console.log(`[Proxy] Forwarding to ${targetEndpoint}`);
 
+            let messagesPayload = [];
+            if (message) {
+                messagesPayload = [
+                    {
+                        role: 'user',
+                        content: message
+                    }
+                ];
+            } else {
+                messagesPayload = [
+                    {
+                        role: 'system',
+                        content: 'You are a research assistant. Provide a list of 5 current news topics or facts about the requested subject. Return ONLY a JSON array of objects with "title" and "summary" fields. No markdown wrappers.'
+                    },
+                    {
+                        role: 'user',
+                        content: `Research: ${query}`
+                    }
+                ];
+            }
+
             const response = await fetch(targetEndpoint, {
                 method: 'POST',
                 headers: {
@@ -93,16 +122,7 @@ app.post('/api/proxy-research', async (req, res) => {
                 },
                 body: JSON.stringify({
                     model: model || defaultModel,
-                    messages: [
-                        {
-                            role: 'system',
-                            content: 'You are a research assistant. Provide a list of 5 current news topics or facts about the requested subject. Return ONLY a JSON array of objects with "title" and "summary" fields. No markdown wrappers.'
-                        },
-                        {
-                            role: 'user',
-                            content: `Research: ${query}`
-                        }
-                    ],
+                    messages: messagesPayload,
                     temperature: 0.3
                 })
             });

@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
-import { GoogleGenAI } from "@google/genai";
 import AdminSidebar from '../../components/AdminSidebar';
 
 interface TableHealth {
@@ -26,6 +25,12 @@ const DiagnosticsView: React.FC = () => {
   const [logs, setLogs] = useState<string[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
+  const [testEndpoint, setTestEndpoint] = useState('https://api.moonshot.ai/v1/chat/completions');
+  const [testApiKey, setTestApiKey] = useState('');
+  const [testModel, setTestModel] = useState('moonshot-v1-8k');
+  const [testPrompt, setTestPrompt] = useState('latest AI headlines');
+  const [isTestingApi, setIsTestingApi] = useState(false);
+  const [apiTestResult, setApiTestResult] = useState('');
 
   const addLog = (msg: string) => {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -61,6 +66,11 @@ const DiagnosticsView: React.FC = () => {
         ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS bg_color TEXT DEFAULT '#f1f1f1';
         ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS text_color TEXT DEFAULT '#111111';
         ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS header_font TEXT DEFAULT 'serif';
+        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS seo_meta_title TEXT;
+        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS seo_meta_description TEXT;
+        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS seo_meta_keywords TEXT;
+        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS seo_og_image TEXT;
+        ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS seo_canonical_url TEXT;
 
         -- Categories Table Base
         CREATE TABLE IF NOT EXISTS categories (
@@ -199,6 +209,46 @@ const DiagnosticsView: React.FC = () => {
 
   useEffect(() => { runDiagnostics(); }, []);
 
+  const runApiKeyTest = async () => {
+    if (!testEndpoint || !testApiKey || !testModel) {
+      setApiTestResult('Please provide endpoint URL, API key, and model before testing.');
+      return;
+    }
+
+    setIsTestingApi(true);
+    setApiTestResult('');
+    addLog(`🧪 Testing API key against ${testEndpoint}...`);
+
+    try {
+      const response = await fetch('/api/proxy-research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: testEndpoint,
+          apiKey: testApiKey,
+          model: testModel,
+          query: testPrompt || 'latest world news',
+          providerName: 'Manual Test'
+        })
+      });
+
+      const responseText = await response.text();
+      if (!response.ok) {
+        setApiTestResult(`Failed (${response.status}): ${responseText.substring(0, 300)}`);
+        addLog(`❌ API key test failed (${response.status}).`);
+        return;
+      }
+
+      setApiTestResult(`Success (${response.status}). Response sample: ${responseText.substring(0, 300)}`);
+      addLog('✅ API key test succeeded.');
+    } catch (err: any) {
+      setApiTestResult(`Request error: ${err.message}`);
+      addLog(`❌ API key test error: ${err.message}`);
+    } finally {
+      setIsTestingApi(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen bg-[#f1f1f1]">
       <AdminSidebar onLogout={() => navigate('/login')} />
@@ -260,6 +310,53 @@ const DiagnosticsView: React.FC = () => {
             {logs.map((log, i) => <div key={i} className="mb-1">{log}</div>)}
           </div>
         </div>
+
+        <section className="mt-10 bg-white border border-gray-200 rounded shadow-sm p-6">
+          <h3 className="text-xs font-black uppercase tracking-widest text-gray-600 mb-4">Manual API Key Tester</h3>
+          <p className="text-xs text-gray-500 mb-4">Use this to validate future provider keys before saving them in environment variables.</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input
+              type="url"
+              value={testEndpoint}
+              onChange={(e) => setTestEndpoint(e.target.value)}
+              placeholder="https://provider-url/v1/chat/completions"
+              className="border border-gray-300 p-3 rounded text-xs font-mono"
+            />
+            <input
+              type="text"
+              value={testApiKey}
+              onChange={(e) => setTestApiKey(e.target.value)}
+              placeholder="Enter API key"
+              className="border border-gray-300 p-3 rounded text-xs font-mono"
+            />
+            <input
+              type="text"
+              value={testModel}
+              onChange={(e) => setTestModel(e.target.value)}
+              placeholder="model-name"
+              className="border border-gray-300 p-3 rounded text-xs font-mono"
+            />
+            <input
+              type="text"
+              value={testPrompt}
+              onChange={(e) => setTestPrompt(e.target.value)}
+              placeholder="Prompt seed"
+              className="border border-gray-300 p-3 rounded text-xs"
+            />
+          </div>
+
+          <div className="mt-4 flex items-center gap-4">
+            <button
+              onClick={runApiKeyTest}
+              disabled={isTestingApi}
+              className="bg-blue-600 text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 disabled:opacity-60"
+            >
+              {isTestingApi ? 'Testing...' : 'Test API Key'}
+            </button>
+            {apiTestResult && <p className="text-xs text-gray-600 break-all">{apiTestResult}</p>}
+          </div>
+        </section>
       </main>
     </div>
   );

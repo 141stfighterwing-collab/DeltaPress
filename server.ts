@@ -1,158 +1,84 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import { GoogleGenAI } from '@google/genai';
 
-const ALLOWED_ENDPOINTS = [
-    'https://api.moonshot.cn/v1/chat/completions',
-    'https://open.bigmodel.cn/api/paas/v4/chat/completions',
-    'https://api.aimlapi.com/chat/completions',
-    'https://api.openai.com/v1/chat/completions'
-];
+import express from "express";
+import { createServer as createViteServer } from "vite";
+import path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const app = express();
-const PORT = 3001;
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
 
-app.use(cors());
-app.use(express.json());
+  app.use(express.json());
 
-app.post('/api/proxy-research', async (req, res) => {
-    const { provider, query, model, endpoint, message } = req.body;
+  // Proxy endpoint for research providers (KIMI, ZAI, ML)
+  // This avoids CORS and browser-level protocol errors
+  app.post("/api/proxy-research", async (req, res) => {
+    const { endpoint, apiKey, model, query, providerName } = req.body;
 
-    console.log(`[Proxy] Request for provider: ${provider}, model: ${model}, endpoint: ${endpoint}`);
+    if (!endpoint || !apiKey || !model || !query) {
+      return res.status(400).json({ error: "Missing required parameters" });
+    }
+
+    console.log(`[Server Proxy] 📡 Forwarding research request for ${providerName} (${model})`);
 
     try {
-        if (provider === 'GEMINI') {
-            const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-            if (!apiKey) {
-                console.error('[Proxy] Gemini API key not configured');
-                return res.status(500).json({ error: 'Gemini API key not configured on server' });
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [
+            { 
+              role: 'system', 
+              content: 'You are a research assistant. Provide a list of 5 current news topics or facts about the requested subject. Return ONLY a JSON array of objects with "title" and "summary" fields. No markdown wrappers.' 
+            },
+            { 
+              role: 'user', 
+              content: `Research: ${query}` 
             }
+          ],
+          temperature: 0.3
+        })
+      });
 
-            console.log(`[Proxy] Using Gemini model: ${model || 'gemini-2.0-flash'}`);
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`[Server Proxy] ${providerName} Error: ${response.status} ${errText}`);
+        return res.status(response.status).send(errText);
+      }
 
-            const ai = new GoogleGenAI({ apiKey });
-            // Using the model ID directly
-            // Note: The structure might vary based on the SDK version, this matches the user's service file usage
-            let response;
-            if (message) {
-                response = await ai.models.generateContent({
-                    model: model || 'gemini-2.0-flash',
-                    contents: message,
-                });
-            } else {
-                response = await ai.models.generateContent({
-                    model: model || 'gemini-2.0-flash',
-                    contents: `Fetch and summarize 5 major news topics or articles regarding: "${query}". Return as a JSON array of objects with "title" and "summary" fields.`,
-                    config: {
-                        tools: [{ googleSearch: {} }],
-                        responseMimeType: "application/json"
-                    }
-                });
-            }
-
-            // The SDK returns text directly via a getter in the latest version
-            const text = response.text || '[]';
-
-            res.json({
-                choices: [{
-                    message: {
-                        content: text
-                    }
-                }]
-            });
-
-        } else {
-            // Handle OpenAI compatible providers (Kimi, Zhipu, AI/ML)
-            if (endpoint && !ALLOWED_ENDPOINTS.includes(endpoint)) {
-                console.error(`[Proxy] Blocked unauthorized endpoint: ${endpoint}`);
-                return res.status(403).json({ error: 'Unauthorized endpoint provided' });
-            }
-            let targetEndpoint = endpoint;
-            let targetKey = '';
-
-            let defaultModel = '';
-
-            if (provider === 'KIMI') {
-                targetEndpoint = 'https://api.moonshot.cn/v1/chat/completions';
-                targetKey = process.env.KIMI_API_KEY || process.env.VITE_KIMI_API_KEY || '';
-                defaultModel = 'moonshot-v1-8k';
-            } else if (provider === 'ZAI') {
-                targetEndpoint = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-                targetKey = process.env.ZAI_API_KEY || process.env.VITE_ZAI_API_KEY || '';
-                defaultModel = 'glm-4';
-            } else if (provider === 'ML') {
-                targetEndpoint = 'https://api.aimlapi.com/chat/completions';
-                targetKey = process.env.ML_API_KEY || process.env.VITE_ML_API_KEY || '';
-                defaultModel = 'gpt-4o';
-            } else if (provider === 'CHATGPT') {
-                targetEndpoint = 'https://api.openai.com/v1/chat/completions';
-                targetKey = process.env.CHATGPT_API || process.env.VITE_CHATGPT_API || '';
-                defaultModel = 'gpt-4o-mini';
-            }
-
-            if (!targetEndpoint) {
-                 return res.status(400).json({ error: `Unknown provider endpoint: ${provider}` });
-            }
-
-            if (!targetKey) {
-                console.error(`[Proxy] Key missing for ${provider}`);
-                return res.status(500).json({ error: `Configuration missing for provider: ${provider}` });
-            }
-
-            console.log(`[Proxy] Forwarding to ${targetEndpoint}`);
-
-            let messagesPayload = [];
-            if (message) {
-                messagesPayload = [
-                    {
-                        role: 'user',
-                        content: message
-                    }
-                ];
-            } else {
-                messagesPayload = [
-                    {
-                        role: 'system',
-                        content: 'You are a research assistant. Provide a list of 5 current news topics or facts about the requested subject. Return ONLY a JSON array of objects with "title" and "summary" fields. No markdown wrappers.'
-                    },
-                    {
-                        role: 'user',
-                        content: `Research: ${query}`
-                    }
-                ];
-            }
-
-            const response = await fetch(targetEndpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${targetKey}`
-                },
-                body: JSON.stringify({
-                    model: model || defaultModel,
-                    messages: messagesPayload,
-                    temperature: 0.3
-                })
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error(`[Proxy] Provider API error: ${response.status} ${errorText}`);
-                return res.status(response.status).json({ error: `Provider API error: ${response.status} ${errorText}` });
-            }
-
-            const data = await response.json();
-            res.json(data);
-        }
+      const data = await response.json();
+      res.json(data);
     } catch (error: any) {
-        console.error('[Proxy] Internal Server Error:', error.message);
-        res.status(500).json({ error: error.message });
+      console.error(`[Server Proxy] Critical Error:`, error.message);
+      res.status(500).json({ error: error.message });
     }
-});
+  });
 
-app.listen(PORT, () => {
-    console.log(`Proxy server running on http://localhost:${PORT}`);
-});
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    // Serve static files in production
+    app.use(express.static(path.join(__dirname, "dist")));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(__dirname, "dist", "index.html"));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+startServer();

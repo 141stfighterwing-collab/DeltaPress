@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import Layout from '../components/Layout';
 import { supabase } from '../services/supabase';
 import { sanitizeHtml, stripAllHtml, validateInput, isPotentiallySqlInjection } from '../services/security';
-import SEO from '../components/SEO';
 
 const ContactView: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -74,11 +73,6 @@ const ContactView: React.FC = () => {
 
   return (
     <Layout>
-      <SEO
-        title="Contact Us"
-        description="Get in touch with the team behind the Socialist AI Blog."
-        keywords="Contact, Connect, Socialist AI"
-      />
       <div className="max-w-2xl">
         <header className="mb-10">
           <h1 className="text-4xl font-black text-gray-900 font-serif mb-4">Contact</h1>

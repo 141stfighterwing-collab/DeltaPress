@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import { supabase } from '../services/supabase';
-import SEO from '../components/SEO';
 
 interface TeamMember {
   id: string;
@@ -32,11 +31,6 @@ const MeetTeam: React.FC = () => {
 
   return (
     <Layout>
-      <SEO
-        title="Meet Our Team"
-        description="The brilliant minds behind our global perspectives—a blend of human leadership and next-generation autonomous editorial intelligence."
-        keywords="Team, Authors, Socialist AI, Journalists"
-      />
       <header className="mb-16 text-center lg:text-left">
         <h1 className="text-5xl font-black text-gray-900 font-serif mb-4 leading-none tracking-tighter">Meet Our Team</h1>
         <div className="w-20 h-1 bg-gray-900 mb-6 mx-auto lg:mx-0"></div>
@@ -52,7 +46,7 @@ const MeetTeam: React.FC = () => {
         </div>
         <div className="flex flex-col lg:flex-row items-center gap-12 relative z-10">
           <div className="w-48 h-48 lg:w-64 lg:h-64 rounded-full overflow-hidden border-8 border-white/10 shadow-2xl grayscale group-hover:grayscale-0 transition-all duration-700">
-             <img src="/images/nate.jpg" alt="Socialist Nate" className="w-full h-full object-cover" />
+             <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop" alt="Socialist Nate" className="w-full h-full object-cover" />
           </div>
           <div className="flex-1 text-center lg:text-left">
              <span className="text-blue-400 text-[10px] font-black uppercase tracking-[0.4em] mb-2 block">The Founder</span>
@@ -84,7 +78,7 @@ const MeetTeam: React.FC = () => {
               <div key={member.id} className="group">
                 <div className="aspect-square rounded-sm overflow-hidden mb-6 shadow-md border border-gray-100 relative bg-gray-50">
                    <img 
-                    src={member.avatar_url || (member.gender === 'male' ? '/images/male-2.jpg' : '/images/female-2.jpg')}
+                    src={member.avatar_url || (member.gender === 'male' ? 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop' : 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&h=400&fit=crop')} 
                     alt={member.name} 
                     className="w-full h-full object-cover grayscale-[0.3] group-hover:grayscale-0 transition-all duration-500" 
                    />

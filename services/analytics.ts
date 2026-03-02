@@ -13,42 +13,28 @@ const getSessionId = () => {
   return sessionId;
 };
 
-let ipDataPromise: Promise<any> | null = null;
-
 const getIpData = async () => {
   let cached = sessionStorage.getItem(IP_DATA_KEY);
   if (cached) return JSON.parse(cached);
 
-  if (ipDataPromise) {
-    return ipDataPromise;
-  }
-
-  ipDataPromise = (async () => {
-    try {
-      const res = await fetch('https://ipapi.co/json/');
-      if (res.ok) {
-        const data = await res.json();
-        sessionStorage.setItem(IP_DATA_KEY, JSON.stringify(data));
-        return data;
-      }
-    } catch (e) {
-      console.debug('IP fetch failed');
-    } finally {
-      ipDataPromise = null;
+  try {
+    const res = await fetch('https://ipapi.co/json/');
+    if (res.ok) {
+      const data = await res.json();
+      sessionStorage.setItem(IP_DATA_KEY, JSON.stringify(data));
+      return data;
     }
-    return null;
-  })();
-
-  return ipDataPromise;
+  } catch (e) {
+    console.debug('IP fetch failed');
+  }
+  return null;
 };
 
 export const trackEvent = async (type: string, targetId?: string, metadata: any = {}) => {
   try {
     const sessionId = getSessionId();
-    const [ipData, { data: { session } }] = await Promise.all([
-      getIpData(),
-      supabase.auth.getSession()
-    ]);
+    const ipData = await getIpData();
+    const { data: { session } } = await supabase.auth.getSession();
     
     const analyticsPayload = {
       event_type: type,

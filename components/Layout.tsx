@@ -35,7 +35,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     title_color: '#000000',
     bg_color: '#f1f1f1',
     text_color: '#111111',
-    header_font: 'serif'
+    header_font: 'serif',
+    seo_meta_title: '',
+    seo_meta_description: '',
+    seo_meta_keywords: '',
+    seo_og_image: '',
+    seo_canonical_url: ''
   });
 
   useEffect(() => {
@@ -86,7 +91,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           title_color: siteSettings.title_color || '#000000',
           bg_color: siteSettings.bg_color || '#f1f1f1',
           text_color: siteSettings.text_color || '#111111',
-          header_font: siteSettings.header_font || 'serif'
+          header_font: siteSettings.header_font || 'serif',
+          seo_meta_title: siteSettings.seo_meta_title || '',
+          seo_meta_description: siteSettings.seo_meta_description || '',
+          seo_meta_keywords: siteSettings.seo_meta_keywords || '',
+          seo_og_image: siteSettings.seo_og_image || '',
+          seo_canonical_url: siteSettings.seo_canonical_url || ''
         });
       }
 
@@ -111,6 +121,44 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     document.documentElement.style.setProperty('--site-bg-color', settings.bg_color);
     document.documentElement.style.setProperty('--site-text-color', settings.text_color);
   }, [settings.theme, settings.bg_color, settings.text_color]);
+
+  useEffect(() => {
+    document.title = settings.seo_meta_title || settings.title;
+
+    const setMeta = (name: string, content: string) => {
+      let tag = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
+      if (!tag) {
+        tag = document.createElement('meta');
+        tag.setAttribute('name', name);
+        document.head.appendChild(tag);
+      }
+      tag.setAttribute('content', content);
+    };
+
+    const setPropertyMeta = (property: string, content: string) => {
+      let tag = document.querySelector(`meta[property="${property}"]`) as HTMLMetaElement | null;
+      if (!tag) {
+        tag = document.createElement('meta');
+        tag.setAttribute('property', property);
+        document.head.appendChild(tag);
+      }
+      tag.setAttribute('content', content);
+    };
+
+    if (settings.seo_meta_description) setMeta('description', settings.seo_meta_description);
+    if (settings.seo_meta_keywords) setMeta('keywords', settings.seo_meta_keywords);
+    if (settings.seo_og_image) setPropertyMeta('og:image', settings.seo_og_image);
+
+    if (settings.seo_canonical_url) {
+      let linkTag = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+      if (!linkTag) {
+        linkTag = document.createElement('link');
+        linkTag.setAttribute('rel', 'canonical');
+        document.head.appendChild(linkTag);
+      }
+      linkTag.setAttribute('href', settings.seo_canonical_url);
+    }
+  }, [settings]);
 
   const getNavClass = (path: string) => {
     const isActive = location.pathname === path;

@@ -2,6 +2,7 @@
 import { supabase } from './supabase';
 import { GoogleGenAI } from "@google/genai";
 import { performResearch } from './researchService';
+import { cleanSlug } from './security';
 
 const SPECTRUM_LABELS: Record<number, string> = {
   [-3]: 'Far Left (Anarchism)',
@@ -124,7 +125,7 @@ export const checkAndRunDueAgents = async (
     if (onStepUpdate) onStepUpdate(`Finalizing publication to registry...`, 90);
     
     const { data: { session } } = await supabase.auth.getSession();
-    const slug = title.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-') + '-' + Math.random().toString(36).substring(2, 6);
+    const slug = cleanSlug(title) + '-' + Math.random().toString(36).substring(2, 6);
 
     const { error: postError } = await supabase.from('posts').insert({
       title, 

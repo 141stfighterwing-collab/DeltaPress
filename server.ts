@@ -61,6 +61,62 @@ async function startServer() {
     }
   });
 
+
+  // Server-side Gemini proxy for research to avoid browser CORS/protocol issues
+  app.post("/api/proxy-gemini-research", async (req, res) => {
+    const { model, query, apiKey } = req.body;
+    const key = process.env.GEMINI_API_KEY || apiKey;
+
+    if (!model || !query || !key) {
+      return res.status(400).json({ error: "Missing required parameters" });
+    }
+
+    console.log(`[Server Proxy] 📡 Forwarding Gemini research request (${model})`);
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          contents: [{
+            role: "user",
+            parts: [{
+              text: `Fetch and summarize 5 major news topics or articles regarding: "${query}". Return ONLY a valid JSON array of objects with "title" and "summary" fields.`
+            }]
+          }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.3
+          },
+          tools: [{ google_search: {} }]
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`[Server Proxy] Gemini Error: ${response.status} ${errText}`);
+        return res.status(response.status).send(errText);
+      }
+
+      const data = await response.json();
+      const content = data?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+      const cleaned = content.replace(/^```json\n?|```$/g, "").trim();
+
+      try {
+        const parsed = JSON.parse(cleaned);
+        return res.json(parsed);
+      } catch {
+        console.error("[Server Proxy] Gemini JSON parsing failed.");
+        return res.status(502).json({ error: "Gemini returned invalid JSON", raw: content });
+      }
+    } catch (error: any) {
+      console.error(`[Server Proxy] Gemini Critical Error:`, error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

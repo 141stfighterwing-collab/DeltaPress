@@ -5,7 +5,7 @@ import PostCard from '../components/PostCard';
 import CategoryIcon from '../components/CategoryIcon';
 import { Post, Category } from '../types';
 import { supabase } from '../services/supabase';
-import { sanitizeSeededPost } from '../utils/postFilters';
+import { extractFirstImageFromContent, getDisplayTitle, getExcerptFromContent, sanitizeSeededPost } from '../utils/postFilters';
 
 const BlogHome: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -19,7 +19,7 @@ const BlogHome: React.FC = () => {
         const [{ data: postsData }, { data: catsData }] = await Promise.all([
           supabase
             .from('posts')
-            .select('id, title, slug, excerpt, created_at, category_id, featured_image, type, status, author_id, updated_at, journalist_id')
+            .select('id, title, slug, excerpt, content, created_at, category_id, featured_image, type, status, author_id, updated_at, journalist_id')
             .eq('status', 'publish')
             .eq('type', 'post')
             .order('created_at', { ascending: false }),
@@ -29,7 +29,22 @@ const BlogHome: React.FC = () => {
             .order('name')
         ]);
 
-        if (postsData) setPosts(postsData.map(sanitizeSeededPost));
+        if (postsData) {
+          const normalizedPosts = postsData.map(rawPost => {
+            const cleanedPost = sanitizeSeededPost(rawPost);
+            const safeTitle = getDisplayTitle(cleanedPost, 'Breaking News');
+            const safeExcerpt = (cleanedPost.excerpt || '').trim() || getExcerptFromContent(cleanedPost.content, 260);
+            const safeImage = cleanedPost.featured_image || extractFirstImageFromContent(cleanedPost.content) || undefined;
+
+            return {
+              ...cleanedPost,
+              title: safeTitle,
+              excerpt: safeExcerpt,
+              featured_image: safeImage
+            };
+          });
+          setPosts(normalizedPosts);
+        }
         if (catsData) setCategories(catsData);
       } catch (err) {
         console.error("Error fetching home data:", err);

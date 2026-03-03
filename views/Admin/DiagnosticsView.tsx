@@ -133,6 +133,13 @@ const DiagnosticsView: React.FC = () => {
         CREATE POLICY "Allow public read journalists" ON journalists FOR SELECT USING (true);
         DROP POLICY IF EXISTS "Allow authenticated manage journalists" ON journalists;
         CREATE POLICY "Allow authenticated manage journalists" ON journalists FOR ALL USING (auth.role() = 'authenticated');
+
+        -- Posts RLS Policies to fix guest access
+        ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "Allow public read posts" ON posts;
+        CREATE POLICY "Allow public read posts" ON posts FOR SELECT USING (status = 'publish');
+        DROP POLICY IF EXISTS "Allow authenticated manage posts" ON posts;
+        CREATE POLICY "Allow authenticated manage posts" ON posts FOR ALL USING (auth.role() = 'authenticated');
       `;
       
       addLog("📡 Executing Database Realignment...");

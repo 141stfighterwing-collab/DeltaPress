@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import CategoryIcon from './CategoryIcon';
+import { isSeededPost } from '../utils/postFilters';
 
 interface RecentPost {
   id: string;
@@ -41,7 +42,7 @@ const Sidebar: React.FC = () => {
           .order('created_at', { ascending: false })
           .limit(5);
 
-        if (postsData) setRecentPosts(postsData);
+        if (postsData) setRecentPosts(postsData.filter(post => !isSeededPost(post)));
 
         // 2. Fetch Categories (Schema Resilient)
         const { data: catData, error: catError } = await supabase

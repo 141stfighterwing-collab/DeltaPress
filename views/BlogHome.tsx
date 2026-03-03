@@ -5,6 +5,7 @@ import PostCard from '../components/PostCard';
 import CategoryIcon from '../components/CategoryIcon';
 import { Post, Category } from '../types';
 import { supabase } from '../services/supabase';
+import { isSeededPost } from '../utils/postFilters';
 
 const BlogHome: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -28,7 +29,7 @@ const BlogHome: React.FC = () => {
             .order('name')
         ]);
 
-        if (postsData) setPosts(postsData);
+        if (postsData) setPosts(postsData.filter(post => !isSeededPost(post)));
         if (catsData) setCategories(catsData);
       } catch (err) {
         console.error("Error fetching home data:", err);

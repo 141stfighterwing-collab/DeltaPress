@@ -6,6 +6,7 @@ import { supabase } from '../services/supabase';
 import { trackEvent } from '../services/analytics';
 import { sanitizeHtml, stripAllHtml, isValidEmail, LIMITS, normalizeYouTubeEmbeds } from '../services/security';
 import CategoryIcon from '../components/CategoryIcon';
+import { sanitizeSeededPost } from '../utils/postFilters';
 
 const SinglePost: React.FC = () => {
   const { slug } = useParams();
@@ -46,7 +47,7 @@ const SinglePost: React.FC = () => {
         .single();
 
       if (postData) {
-        setPost(postData);
+        setPost(sanitizeSeededPost(postData));
         
         // Fetch Category
         if (postData.categories) {

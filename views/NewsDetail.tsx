@@ -1,13 +1,23 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { supabase } from '../services/supabase';
 import { trackEvent } from '../services/analytics';
 
+interface RssArticle {
+  title: string;
+  link: string;
+  pubDate: string;
+  description: string;
+  source: string;
+  content?: string;
+}
+
 const NewsDetail: React.FC = () => {
   const { url } = useParams();
   const location = useLocation();
+  const [article, setArticle] = useState<RssArticle | null>(location.state?.article || null);
+  const [loadingArticle, setLoadingArticle] = useState(true);
   const [comments, setComments] = useState<any[]>([]);
   const [loadingComments, setLoadingComments] = useState(true);
   const [commentName, setCommentName] = useState('');
@@ -15,13 +25,55 @@ const NewsDetail: React.FC = () => {
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const article = location.state?.article || {
-    title: "News Story",
-    description: "External content discussion thread...",
-    source: "News"
-  };
-
   const decodedUrl = url ? decodeURIComponent(url) : '';
+
+  const fetchArticle = async () => {
+    if (!decodedUrl) {
+      setLoadingArticle(false);
+      return;
+    }
+
+    if (location.state?.article) {
+      setLoadingArticle(false);
+      return;
+    }
+
+    setLoadingArticle(true);
+    try {
+      const { data: feeds } = await supabase.from('rss_feeds').select('url');
+      if (!feeds || feeds.length === 0) return;
+
+      const feedResults = await Promise.allSettled(
+        feeds.map(async (feed) => {
+          const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feed.url)}`);
+          const data = await res.json();
+          if (data.status !== 'ok') return null;
+
+          const matched = data.items?.find((item: any) => item.link === decodedUrl);
+          if (!matched) return null;
+
+          return {
+            title: matched.title,
+            link: matched.link,
+            pubDate: matched.pubDate,
+            description: (matched.description || '').replace(/<[^>]*>?/gm, '').substring(0, 400),
+            source: data.feed?.title || 'News',
+            content: matched.content || matched.description || ''
+          } as RssArticle;
+        })
+      );
+
+      const resolvedArticle = feedResults.find(
+        (result): result is PromiseFulfilledResult<RssArticle | null> => result.status === 'fulfilled' && !!result.value
+      )?.value;
+
+      if (resolvedArticle) setArticle(resolvedArticle);
+    } catch (e) {
+      console.error('Failed to fetch article body:', e);
+    } finally {
+      setLoadingArticle(false);
+    }
+  };
 
   const fetchComments = async () => {
     setLoadingComments(true);
@@ -41,12 +93,15 @@ const NewsDetail: React.FC = () => {
   };
 
   useEffect(() => {
+    fetchArticle();
+  }, [decodedUrl]);
+
+  useEffect(() => {
     if (decodedUrl) {
       fetchComments();
-      // Track view of the news discussion thread
-      trackEvent('view', decodedUrl, { title: article.title, type: 'news' });
+      trackEvent('view', decodedUrl, { title: article?.title || 'News Story', type: 'news' });
     }
-  }, [decodedUrl]);
+  }, [decodedUrl, article?.title]);
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +111,7 @@ const NewsDetail: React.FC = () => {
     try {
       const { error } = await supabase.from('news_comments').insert({
         article_url: decodedUrl,
-        article_title: article.title,
+        article_title: article?.title || 'News Story',
         author_name: commentName,
         author_email: commentEmail,
         content: commentText
@@ -73,8 +128,18 @@ const NewsDetail: React.FC = () => {
   };
 
   const handleOutboundLink = () => {
-    trackEvent('rss_outbound', decodedUrl, { title: article.title });
+    trackEvent('rss_outbound', decodedUrl, { title: article?.title || 'News Story' });
   };
+
+  const fallbackArticle: RssArticle = {
+    title: 'News Story',
+    description: 'External content discussion thread...',
+    source: 'News',
+    link: decodedUrl,
+    pubDate: ''
+  };
+
+  const displayArticle = article || fallbackArticle;
 
   return (
     <Layout>
@@ -84,11 +149,18 @@ const NewsDetail: React.FC = () => {
             &larr; Back to Newsroom
           </Link>
           <h1 className="text-4xl font-bold text-gray-900 font-serif mb-6 leading-tight">
-            {article.title}
+            {displayArticle.title}
           </h1>
           <p className="text-lg text-gray-600 font-serif italic mb-8 border-l-4 border-gray-50 pl-6 leading-relaxed">
-            {article.description}
+            {displayArticle.description}
           </p>
+
+          {loadingArticle ? (
+            <div className="text-sm text-gray-400 italic mb-8">Loading article body...</div>
+          ) : displayArticle.content ? (
+            <div className="wp-entry-content font-serif mb-8" dangerouslySetInnerHTML={{ __html: displayArticle.content }} />
+          ) : null}
+
           <a 
             href={decodedUrl} 
             target="_blank" 

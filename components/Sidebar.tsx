@@ -24,10 +24,17 @@ interface MiniNews {
   link: string;
 }
 
+interface SidebarArticle {
+  title: string;
+  link: string;
+  source: string;
+}
+
 const Sidebar: React.FC = () => {
   const [recentPosts, setRecentPosts] = useState<RecentPost[]>([]);
   const [categories, setCategories] = useState<DynamicCategory[]>([]);
   const [miniNews, setMiniNews] = useState<MiniNews[]>([]);
+  const [sidebarArticles, setSidebarArticles] = useState<SidebarArticle[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -74,20 +81,30 @@ const Sidebar: React.FC = () => {
           })));
         }
 
-        // 3. Fetch RSS Mini News
-        const { data: feeds } = await supabase.from('rss_feeds').select('url').limit(1);
+        // 3. Fetch RSS Mini News + article list for sidebar
+        const { data: feeds } = await supabase.from('rss_feeds').select('url').limit(3);
         if (feeds && feeds.length > 0) {
-          try {
-            const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feeds[0].url)}`);
-            const data = await res.json();
-            if (data.status === 'ok') {
-              setMiniNews(data.items.slice(0, 3).map((it: any) => ({
+          const feedResults = await Promise.allSettled(
+            feeds.map(async (feed) => {
+              const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feed.url)}`);
+              const data = await res.json();
+              if (data.status !== 'ok') return [];
+              return data.items.slice(0, 6).map((it: any) => ({
                 title: it.title,
                 source: data.feed.title || 'News',
-                link: it.link
-              })));
-            }
-          } catch (e) {}
+                link: it.link,
+                pubDate: it.pubDate
+              }));
+            })
+          );
+
+          const flattened = feedResults
+            .filter((result): result is PromiseFulfilledResult<any[]> => result.status === 'fulfilled')
+            .flatMap(result => result.value)
+            .sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
+
+          setMiniNews(flattened.slice(0, 3).map(({ title, source, link }) => ({ title, source, link })));
+          setSidebarArticles(flattened.slice(0, 6).map(({ title, source, link }) => ({ title, source, link })));
         }
       } catch (err) {
         console.error("Sidebar sync error:", err);
@@ -123,6 +140,7 @@ const Sidebar: React.FC = () => {
                 <span className="text-[9px] font-black uppercase text-blue-300 block mb-0.5">{news.source}</span>
                 <Link 
                    to={`/news/${encodeURIComponent(news.link)}`} 
+                   state={{ article: news }}
                    className="text-gray-900 hover:text-blue-700 leading-snug block font-serif italic text-[13px]"
                 >
                   {news.title}
@@ -156,6 +174,31 @@ const Sidebar: React.FC = () => {
                 </Link>
               </li>
             ))}
+          </ul>
+        )}
+      </section>
+
+
+      {/* Latest News Articles Widget */}
+      <section>
+        <h3 className="font-bold border-b border-gray-100 pb-2 mb-4 uppercase tracking-wider text-[11px] text-gray-400">Latest Articles</h3>
+        {loading ? (
+          <p className="text-gray-400 italic text-xs">Loading articles...</p>
+        ) : (
+          <ul className="space-y-3">
+            {sidebarArticles.map((article, idx) => (
+              <li key={`${article.link}-${idx}`}>
+                <span className="text-[9px] font-black uppercase tracking-widest text-gray-300 block mb-1">{article.source}</span>
+                <Link
+                  to={`/news/${encodeURIComponent(article.link)}`}
+                  state={{ article }}
+                  className="text-blue-700 hover:text-blue-900 leading-snug block font-medium hover:underline"
+                >
+                  {article.title}
+                </Link>
+              </li>
+            ))}
+            {sidebarArticles.length === 0 && <li className="text-gray-400 italic text-xs">No news articles found</li>}
           </ul>
         )}
       </section>

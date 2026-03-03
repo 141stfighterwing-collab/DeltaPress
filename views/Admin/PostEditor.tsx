@@ -5,6 +5,7 @@ import { generateBlogPostDraft } from '../../services/gemini';
 import { supabase } from '../../services/supabase';
 import { sanitizeHtml, cleanSlug, LIMITS, extractYouTubeVideoId, isPotentiallySqlInjection } from '../../services/security';
 import AdminSidebar from '../../components/AdminSidebar';
+import { sanitizeSeededPost } from '../../utils/postFilters';
 
 const PostEditor: React.FC = () => {
   const navigate = useNavigate();
@@ -76,8 +77,9 @@ const PostEditor: React.FC = () => {
       if (id) {
         const { data: post } = await supabase.from('posts').select('*').eq('id', id).single();
         if (post) {
-          setTitle(post.title || '');
-          setContent(post.content || '');
+          const cleanPost = sanitizeSeededPost(post);
+          setTitle(cleanPost.title || '');
+          setContent(cleanPost.content || '');
           setContentType(post.type || 'post');
           setStatus(post.status || 'publish');
           setFeaturedImage(post.featured_image || '');

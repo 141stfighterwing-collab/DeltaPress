@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
 import { Post } from '../../types';
 import AdminSidebar from '../../components/AdminSidebar';
+import { sanitizeSeededPost } from '../../utils/postFilters';
 
 const PostsList: React.FC = () => {
   const navigate = useNavigate();
@@ -55,7 +56,7 @@ const PostsList: React.FC = () => {
           .range(from, to);
 
         if (error) throw error;
-        setPosts(data || []);
+        setPosts((data || []).map(sanitizeSeededPost));
         if (count !== null) setTotalPosts(count);
       } catch (err) {
         console.error("Error fetching admin posts:", err);

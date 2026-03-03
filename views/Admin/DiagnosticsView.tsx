@@ -11,6 +11,22 @@ interface TableHealth {
   error?: string;
 }
 
+
+const PUBLIC_STORIES_SQL = `-- Public story visibility for all roles (guest/editor/admin)
+ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public read published stories" ON posts;
+CREATE POLICY "Allow public read published stories"
+ON posts
+FOR SELECT
+USING (status = 'publish' AND type = 'post');
+
+DROP POLICY IF EXISTS "Allow public read pages" ON posts;
+CREATE POLICY "Allow public read pages"
+ON posts
+FOR SELECT
+USING (status = 'publish' AND type = 'page');`;
+
 const PRESET_PROVIDERS = [
   { name: 'Custom', endpoint: '', model: '' },
   { name: 'Moonshot Kimi', endpoint: 'https://api.moonshot.cn/v1/chat/completions', model: 'moonshot-v1-8k' },
@@ -342,6 +358,13 @@ const DiagnosticsView: React.FC = () => {
             {logs.map((log, i) => <div key={i} className="mb-1">{log}</div>)}
           </div>
         </div>
+
+
+        <section className="mt-10 bg-white border border-gray-200 rounded shadow-sm p-6">
+          <h3 className="text-xs font-black uppercase tracking-widest text-gray-600 mb-3">Guest Story Access SQL</h3>
+          <p className="text-xs text-gray-500 mb-4">If published stories are hidden for logged-out users, run this SQL in Supabase SQL Editor.</p>
+          <div className="bg-black text-green-400 font-mono text-xs rounded p-4 overflow-x-auto border border-gray-800 whitespace-pre">{PUBLIC_STORIES_SQL}</div>
+        </section>
 
         <section className="mt-10 bg-white border border-gray-200 rounded shadow-sm p-6">
           <h3 className="text-xs font-black uppercase tracking-widest text-gray-600 mb-4">Manual API Key Tester</h3>

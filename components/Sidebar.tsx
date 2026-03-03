@@ -3,12 +3,13 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import CategoryIcon from './CategoryIcon';
-import { sanitizeSeededPost } from '../utils/postFilters';
+import { extractFirstImageFromContent, getDisplayTitle, sanitizeSeededPost } from '../utils/postFilters';
 
 interface RecentPost {
   id: string;
   title: string;
   slug: string;
+  previewImage?: string;
 }
 
 interface DynamicCategory {
@@ -36,13 +37,23 @@ const Sidebar: React.FC = () => {
         // 1. Fetch Recent Posts
         const { data: postsData } = await supabase
           .from('posts')
-          .select('id, title, slug')
+          .select('id, title, slug, content, featured_image')
           .eq('status', 'publish')
           .eq('type', 'post')
           .order('created_at', { ascending: false })
           .limit(5);
 
-        if (postsData) setRecentPosts(postsData.map(sanitizeSeededPost));
+        if (postsData) {
+          setRecentPosts(postsData.map(rawPost => {
+            const cleanPost = sanitizeSeededPost(rawPost);
+            return {
+              id: cleanPost.id,
+              slug: cleanPost.slug,
+              title: getDisplayTitle(cleanPost, 'Breaking News'),
+              previewImage: cleanPost.featured_image || extractFirstImageFromContent(cleanPost.content) || undefined
+            };
+          }));
+        }
 
         // 2. Fetch Categories (Schema Resilient)
         const { data: catData, error: catError } = await supabase
@@ -131,8 +142,17 @@ const Sidebar: React.FC = () => {
           <ul className="space-y-3">
             {recentPosts.map(post => (
               <li key={post.id}>
-                <Link to={`/post/${post.slug}`} className="text-blue-700 hover:text-blue-900 leading-snug block font-medium hover:underline">
-                  {post.title}
+                <Link to={`/post/${post.slug}`} className="group flex items-start gap-3">
+                  {post.previewImage && (
+                    <img
+                      src={post.previewImage}
+                      alt={post.title}
+                      className="w-14 h-14 object-cover rounded border border-gray-100 shrink-0"
+                    />
+                  )}
+                  <span className="text-blue-700 group-hover:text-blue-900 leading-snug block font-medium group-hover:underline">
+                    {post.title}
+                  </span>
                 </Link>
               </li>
             ))}

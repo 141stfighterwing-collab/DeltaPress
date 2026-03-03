@@ -5,6 +5,7 @@ import { Post } from '../types';
 import { supabase } from '../services/supabase';
 import { trackEvent } from '../services/analytics';
 import CategoryIcon from './CategoryIcon';
+import { extractFirstImageFromContent, getDisplayTitle, getExcerptFromContent } from '../utils/postFilters';
 
 interface PostCardProps {
   post: Post & { journalist_id?: string };
@@ -42,19 +43,9 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
     trackEvent('click', post.slug, { title: post.title });
   };
 
-  const getSafePreviewText = (html?: string) => {
-    if (!html) return '';
-    const plainText = html
-      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (plainText.length <= 460) return plainText;
-    return `${plainText.slice(0, 460).trimEnd()}...`;
-  };
+  const displayTitle = getDisplayTitle(post, 'Breaking News');
+  const previewImage = post.featured_image || extractFirstImageFromContent(post.content);
+  const previewText = (post.excerpt || '').trim() || getExcerptFromContent(post.content, 460);
 
   return (
     <article className="mb-24 last:mb-0 group">
@@ -65,7 +56,7 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
           className="hover:text-[#72aee6] transition-colors"
         >
           <h2 className="text-3xl font-black mb-4 text-gray-900 leading-tight font-serif">
-            {post.title}
+            {displayTitle}
           </h2>
         </Link>
         <div className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] flex items-center gap-2">
@@ -90,18 +81,14 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
         </div>
       </header>
 
-      {post.featured_image && (
+      {previewImage && (
         <div className="mb-8 rounded-sm overflow-hidden border border-gray-100 shadow-sm aspect-video">
-           <img src={post.featured_image} alt={post.title} className="w-full h-full object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all duration-700" />
+           <img src={previewImage} alt={displayTitle} className="w-full h-full object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all duration-700" />
         </div>
       )}
 
       <div className="wp-entry-content text-gray-800 leading-relaxed font-serif">
-        {post.excerpt ? (
-          <p>{post.excerpt}</p>
-        ) : (
-          <p>{getSafePreviewText(post.content)}</p>
-        )}
+        <p>{previewText}</p>
       </div>
 
       <footer className="mt-10 pt-6 border-t border-gray-50">

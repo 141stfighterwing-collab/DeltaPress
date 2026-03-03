@@ -10,6 +10,9 @@ const PostsList: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPosts, setTotalPosts] = useState(0);
+  const postsPerPage = 20;
 
   useEffect(() => {
     const fetchPostsAndRole = async () => {
@@ -40,14 +43,20 @@ const PostsList: React.FC = () => {
       }
 
       try {
-        const { data, error } = await supabase
+        setLoading(true);
+        const from = (currentPage - 1) * postsPerPage;
+        const to = from + postsPerPage - 1;
+
+        const { data, count, error } = await supabase
           .from('posts')
-          .select('*')
+          .select('*', { count: 'exact' })
           .eq('type', 'post')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .range(from, to);
 
         if (error) throw error;
         setPosts(data || []);
+        if (count !== null) setTotalPosts(count);
       } catch (err) {
         console.error("Error fetching admin posts:", err);
       } finally {
@@ -55,7 +64,7 @@ const PostsList: React.FC = () => {
       }
     };
     fetchPostsAndRole();
-  }, [navigate]);
+  }, [navigate, currentPage]);
 
   const handleDelete = async (id: string) => {
     // Double-check permissions before attempting delete
@@ -149,6 +158,37 @@ const PostsList: React.FC = () => {
             </table>
           )}
         </div>
+
+        {/* Pagination Controls */}
+        {totalPosts > postsPerPage && (
+          <div className="mt-6 flex justify-between items-center">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className={`px-4 py-2 rounded text-xs font-black uppercase tracking-widest shadow-sm transition-all ${
+                currentPage === 1
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+              }`}
+            >
+              Previous
+            </button>
+            <span className="text-xs text-gray-500 font-bold tracking-widest uppercase">
+              Page {currentPage} of {Math.ceil(totalPosts / postsPerPage)}
+            </span>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(totalPosts / postsPerPage)))}
+              disabled={currentPage === Math.ceil(totalPosts / postsPerPage)}
+              className={`px-4 py-2 rounded text-xs font-black uppercase tracking-widest shadow-sm transition-all ${
+                currentPage === Math.ceil(totalPosts / postsPerPage)
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+              }`}
+            >
+              Next
+            </button>
+          </div>
+        )}
       </main>
     </div>
   );

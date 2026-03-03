@@ -23,6 +23,39 @@ const FREQUENCIES = [
   { id: '1m', hours: 720 }
 ];
 
+const stripCodeFences = (text: string) => text.replace(/^```html\n?|```$/g, '').trim();
+
+const normalizeGeneratedArticle = (rawText: string, fallbackTitle: string) => {
+  const cleaned = stripCodeFences(rawText || '');
+  const htmlTitle = cleaned.match(/<h1>(.*?)<\/h1>/i)?.[1]?.trim();
+  const markdownTitle = cleaned.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  const title = htmlTitle || markdownTitle || fallbackTitle;
+
+  let content = cleaned
+    .replace(/<h1>[\s\S]*?<\/h1>/i, '')
+    .replace(/^#\s+.+$/m, '')
+    .trim();
+
+  // Remove source/reference blocks if the model dumps citations instead of story copy.
+  content = content
+    .replace(/<h2>\s*(references|sources|citations)\s*<\/h2>[\s\S]*$/i, '')
+    .replace(/<h3>\s*(references|sources|citations)\s*<\/h3>[\s\S]*$/i, '')
+    .replace(/^\s*(references|sources|citations)\s*:?\s*$/gim, '')
+    .trim();
+
+  return { title, content };
+};
+
+const isNarrativeEnough = (content: string) => {
+  const plain = content
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return plain.split(' ').length >= 180;
+};
+
 /**
  * Checks for due agents or forces a specific agent to run.
  * @param onStepUpdate Callback for UI updates (step text, percentage)
@@ -92,18 +125,21 @@ export const checkAndRunDueAgents = async (
       contents: `Write a 750-word investigative article regarding: ${dueBot.niche}. 
       ${researchContext ? `Use the following research data to inform your writing:\n${researchContext}` : ''}
       Ensure your ${SPECTRUM_LABELS[dueBot.perspective || 0]} perspective is clear but well-reasoned. 
-      Format: Return ONLY valid HTML (<h1>, <h2>, <p>, <blockquote>). No markdown wrappers.`,
+      Format: Return ONLY valid HTML (<h1>, <h2>, <p>, <blockquote>). No markdown wrappers.
+      CRITICAL: Do not output a references list, source list, or raw URL dump. Output a complete narrative story only.`,
       config: { 
         systemInstruction,
         // We still allow Gemini tools as a secondary layer if needed, but the primary research is now handled by our service
         tools: dueBot.use_current_events ? [{ googleSearch: {} }] : [] 
       }
     });
-    
-    let fullText = textResponse.text || '';
-    fullText = fullText.replace(/^```html\n?|```$/g, '').trim();
-    const title = fullText.match(/<h1>(.*?)<\/h1>/)?.[1] || `${dueBot.niche} Update`;
-    const content = fullText.replace(/<h1>.*?<\/h1>/, '').trim();
+
+    const fullText = textResponse.text || '';
+    const { title, content } = normalizeGeneratedArticle(fullText, `${dueBot.niche} Update`);
+
+    if (!isNarrativeEnough(content)) {
+      throw new Error('Generated content was not a full narrative story. Publication skipped to prevent reference-only posts.');
+    }
 
     // 6. Visual Production
     if (onStepUpdate) onStepUpdate(`Capturing editorial photography...`, 70);

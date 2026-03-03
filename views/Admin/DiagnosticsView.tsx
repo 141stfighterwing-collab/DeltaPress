@@ -11,6 +11,17 @@ interface TableHealth {
   error?: string;
 }
 
+const PRESET_PROVIDERS = [
+  { name: 'Custom', endpoint: '', model: '' },
+  { name: 'Moonshot Kimi', endpoint: 'https://api.moonshot.cn/v1/chat/completions', model: 'moonshot-v1-8k' },
+  { name: 'Zhipu AI (Z.AI)', endpoint: 'https://open.bigmodel.cn/api/paas/v4/chat/completions', model: 'glm-4-flash' },
+  { name: 'AI/ML API', endpoint: 'https://api.aimlapi.com/chat/completions', model: 'gpt-4o' },
+  { name: 'ChatGPT', endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini' },
+  { name: 'GROK (xAI)', endpoint: 'https://api.x.ai/v1/chat/completions', model: 'grok-beta' },
+  { name: 'Claude (Anthropic)', endpoint: 'https://api.anthropic.com/v1/messages', model: 'claude-3-5-sonnet-20241022' }
+];
+
+
 const DiagnosticsView: React.FC = () => {
   const navigate = useNavigate();
   const [geminiStatus, setGeminiStatus] = useState<'pending' | 'ok' | 'error'>('pending');
@@ -25,6 +36,7 @@ const DiagnosticsView: React.FC = () => {
   const [logs, setLogs] = useState<string[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState('Moonshot Kimi');
   const [testEndpoint, setTestEndpoint] = useState('https://api.moonshot.ai/v1/chat/completions');
   const [testApiKey, setTestApiKey] = useState('');
   const [testModel, setTestModel] = useState('moonshot-v1-8k');
@@ -209,6 +221,19 @@ const DiagnosticsView: React.FC = () => {
 
   useEffect(() => { runDiagnostics(); }, []);
 
+  const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const providerName = e.target.value;
+    setSelectedProvider(providerName);
+
+    if (providerName === 'Custom') return;
+
+    const provider = PRESET_PROVIDERS.find(p => p.name === providerName);
+    if (provider) {
+      setTestEndpoint(provider.endpoint);
+      setTestModel(provider.model);
+    }
+  };
+
   const runApiKeyTest = async () => {
     if (!testEndpoint || !testApiKey || !testModel) {
       setApiTestResult('Please provide endpoint URL, API key, and model before testing.');
@@ -314,6 +339,19 @@ const DiagnosticsView: React.FC = () => {
         <section className="mt-10 bg-white border border-gray-200 rounded shadow-sm p-6">
           <h3 className="text-xs font-black uppercase tracking-widest text-gray-600 mb-4">Manual API Key Tester</h3>
           <p className="text-xs text-gray-500 mb-4">Use this to validate future provider keys before saving them in environment variables.</p>
+
+          <div className="mb-4">
+            <label className="block text-xs font-bold text-gray-700 mb-2">Select Provider Preset</label>
+            <select
+              value={selectedProvider}
+              onChange={handleProviderChange}
+              className="border border-gray-300 p-2 rounded text-xs font-mono w-full md:w-1/2"
+            >
+              {PRESET_PROVIDERS.map(p => (
+                <option key={p.name} value={p.name}>{p.name}</option>
+              ))}
+            </select>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input

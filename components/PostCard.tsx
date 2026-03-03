@@ -42,7 +42,8 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
     trackEvent('click', post.slug, { title: post.title });
   };
 
-  const getSafePreviewText = (html: string) => {
+  const getSafePreviewText = (html?: string) => {
+    if (!html) return '';
     const plainText = html
       .replace(/<style[\s\S]*?<\/style>/gi, ' ')
       .replace(/<script[\s\S]*?<\/script>/gi, ' ')

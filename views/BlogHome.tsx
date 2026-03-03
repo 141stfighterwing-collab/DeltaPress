@@ -19,7 +19,7 @@ const BlogHome: React.FC = () => {
         const [{ data: postsData }, { data: catsData }] = await Promise.all([
           supabase
             .from('posts')
-            .select('*')
+            .select('id, title, slug, excerpt, created_at, category_id, featured_image, type, status, author_id, updated_at, journalist_id')
             .eq('status', 'publish')
             .eq('type', 'post')
             .order('created_at', { ascending: false }),

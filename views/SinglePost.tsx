@@ -33,32 +33,41 @@ const SinglePost: React.FC = () => {
   const fetchPostAndMetadata = async () => {
     if (!slug) return;
     try {
-      const { data: postData } = await supabase.from('posts').select('*').eq('slug', slug).single();
+      const { data: postData } = await supabase
+        .from('posts')
+        .select(`
+          *,
+          categories (name),
+          journalists (name, gender, avatar_url),
+          comments (*)
+        `)
+        .eq('slug', slug)
+        .order('created_at', { referencedTable: 'comments', ascending: true })
+        .single();
+
       if (postData) {
         setPost(postData);
         
         // Fetch Category
-        if (postData.category_id) {
-          const { data: cat } = await supabase.from('categories').select('name').eq('id', postData.category_id).maybeSingle();
-          if (cat) setCategoryName(cat.name);
+        if (postData.categories) {
+          setCategoryName((postData.categories as any).name);
         }
 
         // Fetch Journalist Info
-        if (postData.journalist_id) {
-            const { data: bot } = await supabase.from('journalists').select('name, gender, avatar_url').eq('id', postData.journalist_id).maybeSingle();
-            if (bot) {
-                setAuthorInfo({
-                    name: bot.name,
-                    avatar: bot.avatar_url || (bot.gender === 'male' 
-                    ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop' 
-                    : 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop')
-                });
-            }
+        if (postData.journalists) {
+            const bot: any = postData.journalists;
+            setAuthorInfo({
+                name: bot.name,
+                avatar: bot.avatar_url || (bot.gender === 'male'
+                ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop'
+                : 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop')
+            });
         }
 
         // Fetch Comments
-        const { data: comms } = await supabase.from('comments').select('*').eq('post_id', postData.id).order('created_at', { ascending: true });
-        if (comms) setComments(comms);
+        if (postData.comments) {
+          setComments(postData.comments as any[]);
+        }
       }
     } catch (err) {
       console.error(err);

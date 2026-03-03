@@ -27,6 +27,38 @@ ON posts
 FOR SELECT
 USING (status = 'publish' AND type = 'page');`;
 
+
+const NEWS_ARTICLES_SQL = `-- Ensure RSS + news comments tables are readable and ready
+CREATE TABLE IF NOT EXISTS news_comments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  article_url TEXT NOT NULL,
+  article_title TEXT,
+  author_name TEXT NOT NULL,
+  author_email TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE rss_feeds ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public read rss feeds" ON rss_feeds;
+CREATE POLICY "Allow public read rss feeds"
+ON rss_feeds
+FOR SELECT
+USING (true);
+
+ALTER TABLE news_comments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public read news comments" ON news_comments;
+CREATE POLICY "Allow public read news comments"
+ON news_comments
+FOR SELECT
+USING (true);
+
+DROP POLICY IF EXISTS "Allow public create news comments" ON news_comments;
+CREATE POLICY "Allow public create news comments"
+ON news_comments
+FOR INSERT
+WITH CHECK (true);`;
+
 const PRESET_PROVIDERS = [
   { name: 'Custom', endpoint: '', model: '' },
   { name: 'Moonshot Kimi', endpoint: 'https://api.moonshot.cn/v1/chat/completions', model: 'moonshot-v1-8k' },
@@ -365,6 +397,13 @@ const DiagnosticsView: React.FC = () => {
           <p className="text-xs text-gray-500 mb-4">If published stories are hidden for logged-out users, run this SQL in Supabase SQL Editor.</p>
           <div className="bg-black text-green-400 font-mono text-xs rounded p-4 overflow-x-auto border border-gray-800 whitespace-pre">{PUBLIC_STORIES_SQL}</div>
         </section>
+
+        <section className="mt-6 bg-white border border-gray-200 rounded shadow-sm p-6">
+          <h3 className="text-xs font-black uppercase tracking-widest text-gray-600 mb-3">News Article Access SQL</h3>
+          <p className="text-xs text-gray-500 mb-4">Run this if RSS articles or article discussion threads are not visible on the live site.</p>
+          <div className="bg-black text-green-400 font-mono text-xs rounded p-4 overflow-x-auto border border-gray-800 whitespace-pre">{NEWS_ARTICLES_SQL}</div>
+        </section>
+
 
         <section className="mt-10 bg-white border border-gray-200 rounded shadow-sm p-6">
           <h3 className="text-xs font-black uppercase tracking-widest text-gray-600 mb-4">Manual API Key Tester</h3>

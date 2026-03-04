@@ -233,6 +233,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <div className={`absolute left-0 top-full w-56 z-[100] shadow-2xl border transition-all animate-in fade-in slide-in-from-top-1 ${settings.theme === 'dark' ? 'bg-[#111] border-gray-800' : 'bg-[#1d2327] border-gray-800'}`}>
                     <Link to="/meet-our-team" onClick={() => setActiveDropdown(null)} className="block px-8 py-4 text-[11px] font-black uppercase tracking-widest text-gray-300 hover:bg-blue-600 hover:text-white border-b border-white/5">Meet our team</Link>
                     <Link to="/contact" onClick={() => setActiveDropdown(null)} className="block px-8 py-4 text-[11px] font-black uppercase tracking-widest text-gray-300 hover:bg-blue-600 hover:text-white">Contact</Link>
+                    <Link to="/outreach" onClick={() => setActiveDropdown(null)} className="block px-8 py-4 text-[11px] font-black uppercase tracking-widest text-gray-300 hover:bg-blue-600 hover:text-white border-t border-white/5">Outreach</Link>
                   </div>
                 )}
             </div>

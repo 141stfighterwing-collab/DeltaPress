@@ -15,6 +15,23 @@ interface PageNode {
   children: PageNode[];
 }
 
+interface CoreNavItem {
+  title: string;
+  path: string;
+  depth: number;
+  type: 'parent' | 'page';
+}
+
+const CORE_NAV_ITEMS: CoreNavItem[] = [
+  { title: 'Home', path: '/', depth: 0, type: 'page' },
+  { title: 'About Us', path: '#', depth: 0, type: 'parent' },
+  { title: 'Meet Our Team', path: '/meet-our-team', depth: 1, type: 'page' },
+  { title: 'Contact', path: '/contact', depth: 1, type: 'page' },
+  { title: 'Outreach', path: '/outreach', depth: 1, type: 'page' },
+  { title: 'Newsroom', path: '/news', depth: 0, type: 'page' },
+  { title: 'Admin', path: '/admin', depth: 0, type: 'page' }
+];
+
 const PagesListView: React.FC = () => {
   const navigate = useNavigate();
   const [pages, setPages] = useState<PageNode[]>([]);
@@ -166,6 +183,46 @@ const PagesListView: React.FC = () => {
               ) : (
                 pages.map(p => renderPageRow(p))
               )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-8 bg-white border border-gray-200 shadow-xl rounded-xl overflow-hidden">
+          <header className="px-6 py-5 border-b border-gray-200 bg-gray-50">
+            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-gray-700">Built-in Navigation Pages</h2>
+            <p className="text-[10px] text-gray-400 mt-1 uppercase tracking-widest">Included in the menu even when they are not stored in posts</p>
+          </header>
+          <table className="w-full text-left">
+            <thead className="bg-gray-50 border-b border-gray-200 text-[11px] uppercase text-gray-400 font-black tracking-widest">
+              <tr>
+                <th className="px-6 py-5">Title / Navbar Structure</th>
+                <th className="px-6 py-5 text-center">Type</th>
+                <th className="px-6 py-5 text-right">Route</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {CORE_NAV_ITEMS.map((item) => (
+                <tr key={`${item.title}-${item.path}`} className={`hover:bg-blue-50/20 ${item.depth > 0 ? 'bg-gray-50/30' : ''}`}>
+                  <td className="px-6 py-5">
+                    <div className="flex items-center gap-3">
+                      {item.depth > 0 && (
+                        <div className="flex items-center gap-1 shrink-0 text-gray-300">
+                          {[...Array(item.depth)].map((_, i) => (
+                            <span key={i} className="w-6 border-b-2 border-l-2 h-8 -mt-4 border-gray-200 ml-2 rounded-bl"></span>
+                          ))}
+                        </div>
+                      )}
+                      <span className={item.depth > 0 ? 'text-gray-600 font-bold' : 'text-lg font-serif font-black text-gray-900'}>{item.title}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest border ${item.type === 'parent' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                      {item.type === 'parent' ? 'Parent Page' : 'Page'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right text-[11px] font-mono text-gray-400">{item.path}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

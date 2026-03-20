@@ -66,7 +66,8 @@ export const normalizeYouTubeEmbeds = (html: string): string => {
   if (!html) return '';
   
   // Find raw iframes and check if they are YouTube. If they are, wrap them and fix the URL.
-  return html.replace(/<iframe\b[^>]*src=(['"])([^'"]+)\1[^>]*><\/iframe>/gim, (fullMatch, _quote, src) => {
+  // We match the iframe, and optionally any existing wrapper, so we don't doubly wrap it.
+  return html.replace(/(?:<div[^>]*class=["'](?:[^"']*\s)?video-wrap(?:\s[^"']*)?["'][^>]*>\s*)?<iframe\b[^>]*src=(['"])([^'"]+)\1[^>]*><\/iframe>(?:\s*<\/div>)?/gim, (fullMatch, _quote, src) => {
     const videoId = extractYouTubeVideoId(src);
     if (!videoId) return fullMatch;
     

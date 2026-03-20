@@ -60,4 +60,16 @@ describe("normalizeYouTubeEmbeds", () => {
     const expected = '<div class="video-wrap"><iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>';
     expect(normalizeYouTubeEmbeds(html)).toBe(expected);
   });
+
+  it("should not doubly wrap iframes already inside a video-wrap div", () => {
+    const html = '<div class="video-wrap"><iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe></div>';
+    const expected = '<div class="video-wrap"><iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>';
+    expect(normalizeYouTubeEmbeds(html)).toBe(expected);
+
+    const htmlWithWhitespace = '<div class="video-wrap">\n  <iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>\n</div>';
+    expect(normalizeYouTubeEmbeds(htmlWithWhitespace)).toBe(expected);
+
+    const htmlWithExtraClass = '<div class="some-class video-wrap other-class"><iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe></div>';
+    expect(normalizeYouTubeEmbeds(htmlWithExtraClass)).toBe(expected);
+  });
 });

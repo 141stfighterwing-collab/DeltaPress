@@ -46,6 +46,125 @@ See [Version History](#version-history) for changelog.
 | [Technical Documentation](docs/DeltaPress_Technical_Documentation.pdf) | CORS, Rate Limiting, Model Configurations |
 | [Architecture Analysis](docs/DeltaPress_Architecture_Analysis_Report.pdf) | Layered architecture, ERD, API contracts |
 
+## 🚀 Installation
+
+### One-Click Install (Windows)
+
+The fastest way to get DeltaPress running on Windows:
+
+```powershell
+# Clone and setup in one command
+git clone https://github.com/141stfighterwing-collab/DeltaPress.git; cd DeltaPress; .\scripts\powershell\quick-setup.ps1
+```
+
+Or if you already have the project:
+
+```powershell
+# One-click setup (auto-installs Node.js if needed)
+.\scripts\powershell\quick-setup.ps1
+
+# One-click setup with Docker
+.\scripts\powershell\quick-setup.ps1 -WithDocker
+```
+
+### Full Automated Install (Windows)
+
+For complete automated deployment with all checks:
+
+```powershell
+# Full rollout with automatic Node.js installation
+.\scripts\powershell\rollout.ps1 -Mode Host -InstallNodeJS
+
+# Full rollout with Docker (auto-install Docker if needed)
+.\scripts\powershell\rollout.ps1 -Mode Docker -InstallDocker
+
+# Just check system requirements
+.\scripts\powershell\rollout.ps1 -Mode CheckOnly
+```
+
+### Manual Install (All Platforms)
+
+<details>
+<summary>Click to expand manual installation steps</summary>
+
+#### Prerequisites
+
+- Node.js 18+ ([Download](https://nodejs.org/))
+- npm (comes with Node.js)
+- Git ([Download](https://git-scm.com/))
+- API key for Google Gemini ([Get free key](https://aistudio.google.com/app/apikey))
+
+#### Steps
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/141stfighterwing-collab/DeltaPress.git
+cd DeltaPress
+
+# 2. Install dependencies
+npm install
+
+# 3. Create environment file
+# Windows
+copy NUL .env.local
+# Linux/macOS
+touch .env.local
+
+# 4. Edit .env.local with your API keys
+# Minimum required:
+# GEMINI_API_KEY=your_key_here
+
+# 5. Start development server
+npm run dev
+```
+
+</details>
+
+### Install via Docker
+
+```bash
+# Build and run with Docker
+docker build -t deltapress .
+docker run -d -p 3000:3000 --env-file .env.local deltapress
+
+# Or with Docker Compose
+docker-compose up -d
+```
+
+### Install as Windows Service (Production)
+
+```powershell
+# Install as a Windows Service (requires Administrator)
+.\scripts\powershell\service-manager.ps1 -Action Install
+.\scripts\powershell\service-manager.ps1 -Action Start
+
+# Check status
+.\scripts\powershell\service-manager.ps1 -Action Status
+```
+
+### Verify Installation
+
+After installation, verify everything is working:
+
+```bash
+# Check health endpoint
+curl http://localhost:3000/api/health
+
+# Or open in browser
+start http://localhost:3000/api/health  # Windows
+open http://localhost:3000/api/health   # macOS
+xdg-open http://localhost:3000/api/health  # Linux
+```
+
+Expected response:
+```json
+{
+  "status": "healthy",
+  "version": "1.4.0",
+  "uptime": 10.5
+}
+```
+
 ## What this project includes
 
 - A React frontend with public pages and admin tooling.

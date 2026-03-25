@@ -1,14 +1,29 @@
 {
-  "version": "1.5.0",
+  "version": "1.6.0",
   "name": "DeltaPress",
   "releaseDate": "2025-03-26",
   "changes": [
-    "Rugged one-click installer with visual progress bar",
-    "Validation mode for testing without changes",
-    "Comprehensive FAQ documentation",
-    "Enhanced error handling with solutions"
+    "Database installation support (PostgreSQL, MySQL, MongoDB)",
+    "Auto-configuration of database tables and schema",
+    "Secure credential generation for app and database",
+    "Credentials file with automatic .gitignore protection",
+    "Docker container support for databases"
   ],
   "patches": [
+    {
+      "version": "1.6.0",
+      "date": "2025-03-26",
+      "changes": [
+        "Database installation with PostgreSQL (default), MySQL, and MongoDB options",
+        "Automatic database table creation with schema initialization",
+        "Secure credential generation with unique passwords for app and database",
+        "Credentials saved to .credentials file (auto-added to .gitignore)",
+        "Docker container support for database deployment",
+        "Database connection string auto-configuration",
+        "Admin user auto-creation in database",
+        "JWT secret auto-generation for security"
+      ]
+    },
     {
       "version": "1.5.0",
       "date": "2025-03-26",

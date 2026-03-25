@@ -37,3 +37,10 @@ logs/
 # Cache
 .cache/
 .npm/
+
+# Credentials (NEVER UPLOAD)
+.credentials
+*.credentials
+credentials.txt
+secrets.txt
+*.secret

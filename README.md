@@ -5,15 +5,46 @@ It combines a traditional publishing UI (posts, pages, admin views) with an auto
 
 ## Version
 
-**Current Version: 1.1.0**
+**Current Version: 1.2.0**
 
 | Property | Value |
 |----------|-------|
-| Version | 1.1.0 |
+| Version | 1.2.0 |
 | Release Date | 2025-03-26 |
 | Status | Stable |
 
 See [Version History](#version-history) for changelog.
+
+## 📸 Screenshots
+
+### Application Screenshots
+
+| Screenshot | Description |
+|------------|-------------|
+| ![Homepage](screenshots/screenshot-1.png) | **Homepage** - Blog landing with category explorer |
+| ![Newsroom](screenshots/screenshot-2.png) | **Newsroom** - News listing and filtering |
+| ![Admin Dashboard](screenshots/screenshot-3.png) | **Admin Dashboard** - System overview and statistics |
+| ![Journalists View](screenshots/screenshot-4.png) | **AI Agents** - Journalist agent management |
+| ![Agent Configuration](screenshots/screenshot-5.png) | **Agent Config** - Agent persona setup modal |
+| ![Diagnostics](screenshots/screenshot-6.png) | **Diagnostics** - System health monitoring |
+| ![Post Editor](screenshots/screenshot-7.png) | **Post Editor** - Content creation interface |
+
+### Test Results Screenshots
+
+| Screenshot | Description |
+|------------|-------------|
+| ![Round Robin Test](screenshots/screenshot-8.png) | **Round Robin Logic** - Provider rotation validation |
+| ![Key Rotation Test](screenshots/screenshot-9.png) | **Key Rotation** - Multi-key cycling test |
+| ![Fallback Test](screenshots/screenshot-10.png) | **Fallback Logic** - Provider failover test |
+| ![Health Check](screenshots/screenshot-11.png) | **Health Check** - Application health status |
+| ![Performance Test](screenshots/screenshot-12.png) | **Performance** - Load time validation |
+
+## 📄 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Technical Documentation](docs/DeltaPress_Technical_Documentation.pdf) | CORS, Rate Limiting, Model Configurations |
+| [Architecture Analysis](docs/DeltaPress_Architecture_Analysis_Report.pdf) | Layered architecture, ERD, API contracts |
 
 ## What this project includes
 
@@ -23,6 +54,9 @@ See [Version History](#version-history) for changelog.
 - Agent orchestration for scheduled journalist bots.
 - Supabase integration for auth, content persistence, and admin data.
 - PowerShell diagnostic scripts for monitoring and health checks.
+- **CORS handling** with configurable origin whitelisting.
+- **API rate limiting** with per-provider configuration.
+- **Model-specific configurations** for optimal API performance.
 
 ## Quick start
 
@@ -54,6 +88,9 @@ ML_API_KEY=your_key_here
 # Supabase client settings (if not hardcoded elsewhere)
 SUPABASE_URL=your_supabase_url
 SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# CORS Configuration (optional)
+CORS_ORIGINS=https://yourdomain.com,https://admin.yourdomain.com
 ```
 
 ### 3) Run in development
@@ -75,6 +112,130 @@ The app runs at:
 - `npm run test` — Runs Playwright tests.
 - `npm run test:ui` — Runs Playwright tests with UI.
 - `npm run test:unit` — Runs unit tests with Vitest.
+
+## CORS Handling
+
+DeltaPress implements configurable CORS (Cross-Origin Resource Sharing) to securely handle cross-origin requests.
+
+### Configuration
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `CORS_ORIGINS` | string[] | `localhost:3000, localhost:5173` | Allowed origin URLs |
+| Methods | string[] | `GET, POST, PUT, DELETE, OPTIONS` | Allowed HTTP methods |
+| Credentials | boolean | `true` | Allow cookies/auth headers |
+| Max Age | number | `86400` | Preflight cache duration (seconds) |
+
+### Environment Setup
+
+```bash
+# Multiple origins (comma-separated)
+CORS_ORIGINS=https://app.example.com,https://admin.example.com
+
+# Wildcard (not recommended for production)
+CORS_ORIGINS=*
+```
+
+### Preflight Handling
+
+The server automatically handles OPTIONS preflight requests with appropriate headers:
+- `Access-Control-Allow-Origin`
+- `Access-Control-Allow-Methods`
+- `Access-Control-Allow-Headers`
+- `Access-Control-Allow-Credentials`
+- `Access-Control-Max-Age`
+
+## API Rate Limiting
+
+Rate limiting protects both the application and external API providers from excessive requests.
+
+### Provider Limits
+
+| Provider | Requests/Min | Cooldown | Notes |
+|----------|--------------|----------|-------|
+| Google Gemini | 60 | 60 seconds | Higher limits for paid tier |
+| Zhipu AI | 30 | 120 seconds | Chinese AI provider |
+| AI/ML API | 60 | 60 seconds | OpenAI-compatible |
+| Moonshot Kimi | 30 | 120 seconds | Chinese language optimized |
+
+### Rate Limit Headers
+
+All API responses include monitoring headers:
+
+| Header | Description |
+|--------|-------------|
+| `X-RateLimit-Limit` | Maximum requests in window |
+| `X-RateLimit-Remaining` | Remaining requests |
+| `X-RateLimit-Reset` | Unix timestamp when window resets |
+| `Retry-After` | Seconds until retry (on 429) |
+
+### Cooldown Mechanism
+
+When a rate limit is exceeded:
+1. Provider enters cooldown period
+2. Requests automatically route to fallback providers
+3. Cooldown clears after specified duration or on success
+
+## Model Configurations
+
+Each AI model has unique characteristics. DeltaPress maintains model-specific configurations for optimal performance.
+
+### Model Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `maxTokens` | Maximum output tokens |
+| `temperature` | Randomness control (0-1) |
+| `supportsJson` | JSON response format support |
+| `supportsSearch` | Search grounding capability |
+| `timeout` | Request timeout (ms) |
+| `retryCount` | Auto-retry attempts |
+
+### Gemini Models
+
+| Model | Max Tokens | JSON | Search | Timeout |
+|-------|------------|------|--------|---------|
+| gemini-2.0-flash | 8192 | ✓ | ✓ | 30s |
+| gemini-1.5-flash | 8192 | ✓ | ✓ | 30s |
+
+### Zhipu AI Models
+
+| Model | Max Tokens | JSON | Timeout | Notes |
+|-------|------------|------|---------|-------|
+| glm-4-flash | 4096 | ✓ | 25s | Fast response |
+| glm-4 | 8192 | ✓ | 45s | Full featured |
+| glm-3-turbo | 4096 | ✗ | 30s | Legacy model |
+
+### Other Models
+
+| Provider | Model | Max Tokens | JSON | Timeout |
+|----------|-------|------------|------|---------|
+| AI/ML API | gpt-4o | 4096 | ✓ | 30s |
+| Moonshot Kimi | moonshot-v1-8k | 8192 | ✓ | 30s |
+
+### Model-Specific Handling
+
+The system adapts request format per model:
+
+```typescript
+// Gemini: Uses tools for search grounding
+{
+  tools: [{ google_search: {} }],
+  generationConfig: { responseMimeType: "application/json" }
+}
+
+// Zhipu AI: Uses max_new_tokens instead of max_tokens
+{
+  max_new_tokens: 4096,
+  temperature: 0.3
+}
+
+// OpenAI-compatible: Standard format
+{
+  max_tokens: 4096,
+  response_format: { type: "json_object" }
+}
+```
 
 ## PowerShell Diagnostic Scripts
 
@@ -131,40 +292,6 @@ DeltaPress includes comprehensive PowerShell diagnostic scripts for monitoring a
 - Warning detection
 - Recent log display with color coding
 
-### Quick Health Check
-
-```powershell
-# Fast health check
-.\scripts\powershell\quick-health.ps1
-
-# Output example:
-# ✓ Node.js: v18.17.0
-# ✓ npm: v9.6.7
-# ✓ Server: Running (HTTP 200)
-# ✓ Dependencies: 295 packages
-# ✓ Config: .env.local found
-# ⚠ Build: Not built
-```
-
-### Log Analysis
-
-```powershell
-# Check logs
-.\scripts\powershell\check-logs.ps1
-
-# Show more lines
-.\scripts\powershell\check-logs.ps1 -Lines 100
-
-# Show only errors
-.\scripts\powershell\check-logs.ps1 -Errors
-
-# Follow logs in real-time
-.\scripts\powershell\check-logs.ps1 -Follow
-
-# Verbose output
-.\scripts\powershell\check-logs.ps1 -Verbose
-```
-
 ### Diagnostic Output Features
 
 All diagnostic scripts include:
@@ -192,13 +319,13 @@ DeltaPress uses semantic versioning (SemVer) with automated version management.
 # Show current version
 .\scripts\powershell\version-manager.ps1 -Show
 
-# Increment patch version (1.1.0 → 1.1.1)
+# Increment patch version (1.2.0 → 1.2.1)
 .\scripts\powershell\version-manager.ps1 -Patch
 
-# Increment minor version (1.1.0 → 1.2.0)
+# Increment minor version (1.2.0 → 1.3.0)
 .\scripts\powershell\version-manager.ps1 -Minor
 
-# Increment major version (1.1.0 → 2.0.0)
+# Increment major version (1.2.0 → 2.0.0)
 .\scripts\powershell\version-manager.ps1 -Major
 
 # Set specific version
@@ -222,6 +349,13 @@ DeltaPress uses semantic versioning (SemVer) with automated version management.
 
 <details>
 <summary>Click to expand version history</summary>
+
+#### v1.2.0 (2025-03-26)
+- CORS handling with configurable origins
+- API rate limiting per provider
+- Model-specific configurations
+- Enhanced error handling and retry logic
+- PDF documentation
 
 #### v1.1.0 (2025-03-26)
 - Round Robin API cycling implementation
@@ -276,163 +410,45 @@ ZAI_API_KEY=key1,key2,key3
 
 When multiple keys are configured, the system will cycle through them in round-robin fashion, distributing load evenly across all keys.
 
-### API Cycling Example
-
-```
-Request 1 → Gemini (Key 1)
-Request 2 → Zhipu AI (Key 1)
-Request 3 → AI/ML API (Key 1)
-Request 4 → Moonshot Kimi (Key 1)
-Request 5 → Gemini (Key 1)  [Cycle repeats]
-```
-
-With multiple keys per provider:
-```
-Request 1 → Gemini (Key 1)
-Request 2 → Zhipu AI (Key 1)
-Request 3 → Zhipu AI (Key 2)  [Key rotation within provider]
-Request 4 → Zhipu AI (Key 3)
-Request 5 → AI/ML API (Key 1)
-```
-
 ### Monitoring API Usage
 
-The system provides statistics through the `getRoundRobinStats()` function:
-
 ```typescript
-import { getRoundRobinStats } from './services/researchService';
+import { getRoundRobinStats, getAllProvidersStatus } from './services/researchService';
 
 const stats = getRoundRobinStats();
-console.log(stats);
-// {
-//   totalRotations: 42,
-//   lastRotationTime: 1711459200000,
-//   providerStats: [
-//     { providerId: 'GEMINI', success: 10, failure: 2 },
-//     { providerId: 'ZAI', success: 8, failure: 0 }
-//   ],
-//   availableProviders: [
-//     { id: 'GEMINI', name: 'Google Gemini', keyCount: 1 },
-//     { id: 'ZAI', name: 'Zhipu AI', keyCount: 3 }
-//   ]
-// }
+const providers = getAllProvidersStatus();
+
+console.log(stats.totalRotations);      // Total rotations
+console.log(stats.providerStats);        // Per-provider success/failure
+console.log(providers.filter(p => p.inCooldown)); // Providers in cooldown
 ```
 
-## Project layout (thorough)
+## API Reference
 
-> Note: This tree intentionally focuses on app code and configuration, not `node_modules`.
+### Health Check
 
-```text
-.
-├── App.tsx                    # Main app shell and route composition
-├── index.tsx                  # React entry point
-├── index.html                 # HTML template for Vite
-├── server.ts                  # Express server + Vite middleware + research proxy
-├── metadata.json              # App metadata used by AI Studio/export tooling
-├── package.json               # Scripts and dependencies
-├── version.json               # Version management and changelog
-├── tsconfig.json              # TypeScript configuration
-├── vite.config.ts             # Vite config (TypeScript)
-├── types.ts                   # Shared app-level TypeScript types
-│
-├── components/
-│   ├── Layout.tsx             # Shared page layout wrapper
-│   ├── Sidebar.tsx            # Frontend sidebar navigation
-│   ├── AdminSidebar.tsx       # Admin-specific sidebar
-│   ├── PostCard.tsx           # Post summary/list card component
-│   └── CategoryIcon.tsx       # Category icon rendering helper
-│
-├── views/
-│   ├── BlogHome.tsx           # Public blog landing
-│   ├── Newsroom.tsx           # News listing view
-│   ├── NewsDetail.tsx         # News detail page
-│   ├── SinglePost.tsx         # Blog post detail page
-│   ├── MeetTeam.tsx           # Team/about page
-│   ├── ContactView.tsx        # Contact page
-│   ├── Auth/
-│   │   ├── Login.tsx          # Authentication login form
-│   │   └── Register.tsx       # Authentication register form
-│   └── Admin/
-│       ├── AdminDashboard.tsx # Admin home/dashboard
-│       ├── PostsList.tsx      # Post management
-│       ├── PostEditor.tsx     # Post editing and publishing
-│       ├── PagesListView.tsx  # Page management
-│       ├── UsersList.tsx      # User management
-│       ├── JournalistsView.tsx# Journalist-agent management
-│       ├── RssFeedsView.tsx   # RSS feed configuration/monitoring
-│       ├── AnalyticsView.tsx  # Site/admin analytics panels
-│       ├── SeoView.tsx        # SEO controls
-│       ├── AppearanceView.tsx # Theming/appearance controls
-│       ├── SettingsView.tsx   # Global settings
-│       ├── DiagnosticsView.tsx# Health/debug diagnostics
-│       └── GenericListView.tsx# Reusable admin list view abstraction
-│
-├── services/
-│   ├── supabase.ts            # Supabase client initialization
-│   ├── security.ts            # Security helpers and validation checks
-│   ├── analytics.ts           # Analytics tracking/helper service
-│   ├── gemini.ts              # Gemini utility wrappers for generation
-│   ├── researchService.ts     # Multi-provider research rotation + fallback logic
-│   └── agentEngine.ts         # Journalist-agent scheduler and auto-publishing pipeline
-│
-├── scripts/
-│   ├── powershell/
-│   │   ├── diagnostics.ps1    # Full diagnostic suite
-│   │   ├── quick-health.ps1   # Fast health check
-│   │   ├── check-logs.ps1     # Log analysis tool
-│   │   └── version-manager.ps1# Version management
-│   └── validate-round-robin.ts# Round robin validation script
-│
-├── tests/
-│   ├── research-round-robin.spec.ts  # Playwright tests for API cycling
-│   └── unit/
-│       └── round-robin-unit.test.ts  # Unit tests for round robin
-│
-└── playwright-report/                # Test reports and screenshots
+```
+GET /api/health
 ```
 
-## AI + agent architecture
+Returns server status, version, uptime, and rate limit configuration.
 
-These are the key files for the automated AI newsroom workflow:
+### Models
 
-### `services/agentEngine.ts`
-- Selects due journalist agents based on schedule.
-- Builds persona/system instructions from journalist profile data.
-- Optionally runs current-events research via round-robin API cycling.
-- Generates HTML article content and optional featured image.
-- Publishes generated posts via Supabase.
+```
+GET /api/models
+```
 
-### `services/researchService.ts`
-- **Round Robin Rotation**: Cycles through all available providers with valid API keys.
-- **Multi-Key Support**: Supports multiple API keys per provider for load balancing.
-- **Automatic Fallback**: Falls back to next provider on failure.
-- **Statistics Tracking**: Monitors success/failure rates per provider.
-- **Provider Management**: Dynamically detects available providers based on configured keys.
+Returns all configured models with their parameters.
 
-### `server.ts`
-- Hosts `/api/proxy-research` to avoid CORS and hide direct browser calls to external research endpoints.
-- Hosts `/api/proxy-gemini-research` for Gemini-specific research with search grounding.
-- Runs Vite middleware in development and static serving in production.
+### Research Proxy
 
-## Managing Agents
+```
+POST /api/proxy-research
+POST /api/proxy-gemini-research
+```
 
-Journalist agents run via the `services/agentEngine.ts` orchestration pipeline. To add or remove an agent:
-
-1. **Add**: Insert a new journalist record into the `journalists` Supabase table.
-2. **Remove**: Either set the journalist `status` to 'paused', or delete the record.
-
-### Agent Configuration Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Display name for byline |
-| `title` | string | Professional title |
-| `niche` | string | Editorial beat / focus area |
-| `category_id` | UUID | Reference to content category |
-| `schedule` | enum | Publication frequency (6h, 24h, 1w, 2w, 1m, 2m) |
-| `perspective` | int | Editorial stance (-3 to +3 scale) |
-| `use_current_events` | boolean | Enable real-time research integration |
-| `status` | enum | Agent status (active, paused) |
+Proxies requests to AI providers with CORS protection and rate limiting.
 
 ## Testing
 
@@ -462,7 +478,8 @@ npx playwright show-report
 1. Build frontend assets: `npm run build`
 2. Run the server in production mode (`NODE_ENV=production`)
 3. Ensure all runtime environment variables are set
-4. Use PowerShell diagnostic scripts for monitoring
+4. Configure CORS origins for your domain
+5. Use PowerShell diagnostic scripts for monitoring
 
 ## Contributing
 

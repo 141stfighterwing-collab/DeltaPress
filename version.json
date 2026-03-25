@@ -1,14 +1,27 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "DeltaPress",
   "releaseDate": "2025-03-26",
   "changes": [
-    "Enhanced Round Robin API cycling with multi-key support",
-    "Added PowerShell diagnostic scripts",
-    "Implemented Playwright testing framework",
-    "Updated README with comprehensive documentation"
+    "CORS handling with configurable origins",
+    "API rate limiting per provider with cooldown",
+    "Model-specific configurations for optimal performance",
+    "Enhanced error handling and retry logic",
+    "PDF documentation for technical reference"
   ],
   "patches": [
+    {
+      "version": "1.2.0",
+      "date": "2025-03-26",
+      "changes": [
+        "CORS handling with configurable origin whitelisting",
+        "API rate limiting with per-provider configuration",
+        "Model-specific configurations for Gemini, Zhipu, AI/ML, Kimi",
+        "Automatic cooldown mechanism on rate limit errors",
+        "Enhanced retry logic with exponential backoff",
+        "PDF technical documentation"
+      ]
+    },
     {
       "version": "1.1.0",
       "date": "2025-03-26",

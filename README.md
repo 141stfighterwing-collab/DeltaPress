@@ -50,21 +50,44 @@ See [Version History](#version-history) for changelog.
 
 ### One-Click Install (Windows)
 
-The fastest way to get DeltaPress running on Windows:
+The fastest way to get DeltaPress running on Windows with visual progress bar:
 
 ```powershell
-# Clone and setup in one command
-git clone https://github.com/141stfighterwing-collab/DeltaPress.git; cd DeltaPress; .\scripts\powershell\quick-setup.ps1
+# Clone and run one-click installer with progress bar
+git clone https://github.com/141stfighterwing-collab/DeltaPress.git; cd DeltaPress; .\scripts\powershell\install.ps1
 ```
 
-Or if you already have the project:
+**The installer will:**
+- ✓ Show real-time progress bar with percentages
+- ✓ Check all prerequisites before installing
+- ✓ Install Node.js silently (if needed)
+- ✓ Install all dependencies
+- ✓ Configure environment
+- ✓ Start the server automatically
 
 ```powershell
-# One-click setup (auto-installs Node.js if needed)
+# Quick setup (simpler version)
 .\scripts\powershell\quick-setup.ps1
 
-# One-click setup with Docker
-.\scripts\powershell\quick-setup.ps1 -WithDocker
+# One-click with Docker
+.\scripts\powershell\install.ps1 -WithDocker
+
+# Force reinstall dependencies
+.\scripts\powershell\install.ps1 -ForceReinstall
+
+# Custom port
+.\scripts\powershell\install.ps1 -Port 8080
+```
+
+### Installation Progress Display
+
+The installer shows real-time progress like this:
+
+```
+[████████████████░░░░░░░░░░░░░░░░░░░░░░░░] 35% Installing Dependencies → Installing packages... (65%)
+
+    ✓ Node.js v20.10.0 installed
+    → Running npm install...
 ```
 
 ### Full Automated Install (Windows)

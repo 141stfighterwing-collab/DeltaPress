@@ -1,9 +1,8 @@
 <#
 .SYNOPSIS
-    Quick setup script for DeltaPress on Windows
+    DeltaPress Quick Setup with Progress Bar
 .DESCRIPTION
-    Simplified one-click setup that handles common deployment scenarios.
-    Automatically detects requirements and installs missing components.
+    One-click setup with visual progress bar and silent installation.
 
 .EXAMPLE
     .\quick-setup.ps1
@@ -13,103 +12,267 @@
 [CmdletBinding()]
 param(
     [switch]$WithDocker,
-    [switch]$ForceInstall
+    [switch]$ForceReinstall
 )
 
-$ErrorActionPreference = "Stop"
+# ============================================================================
+# Progress Bar Function
+# ============================================================================
 
-# Colors
-function Write-Step { param($Message) Write-Host "`n► $Message" -ForegroundColor Cyan }
-function Write-Success { param($Message) Write-Host "✓ $Message" -ForegroundColor Green }
-function Write-Fail { param($Message) Write-Host "✗ $Message" -ForegroundColor Red }
-function Write-Info { param($Message) Write-Host "  $Message" -ForegroundColor DarkGray }
-
-Write-Host @"
-
-╔═══════════════════════════════════════════════════════════════╗
-║              DeltaPress Quick Setup v1.0                      ║
-║         AI-Powered Newsroom Platform Deployment               ║
-╚═══════════════════════════════════════════════════════════════╝
-
-"@
-
-# Step 1: Check Administrator
-Write-Step "Checking privileges..."
-$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-if ($isAdmin) {
-    Write-Success "Running as Administrator"
-} else {
-    Write-Info "Not running as Administrator (some features may require elevation)"
+function Show-Progress {
+    param(
+        [int]$Percent,
+        [string]$Message,
+        [string]$Detail = ""
+    )
+    
+    $barWidth = 30
+    $filled = [math]::Floor($barWidth * $Percent / 100)
+    $empty = $barWidth - $filled
+    
+    $bar = "█" * $filled + "░" * $empty
+    $percentStr = "{0,3}" -f $Percent
+    
+    Write-Host "`r  " -NoNewline
+    Write-Host "[$bar]" -ForegroundColor Cyan -NoNewline
+    Write-Host " $percentStr% " -NoNewline
+    Write-Host $Message -NoNewline
+    
+    if ($Detail) {
+        Write-Host " → $Detail" -ForegroundColor DarkGray
+    } else {
+        Write-Host ""
+    }
 }
 
-# Step 2: Check/Install Node.js
-Write-Step "Checking Node.js..."
+function Show-Step {
+    param([string]$Message, [string]$Status = "info")
+    
+    $icon = switch ($Status) {
+        "ok" { "✓"; $color = "Green" }
+        "warn" { "⚠"; $color = "Yellow" }
+        "error" { "✗"; $color = "Red" }
+        "skip" { "⊘"; $color = "DarkGray" }
+        default { "→"; $color = "DarkGray" }
+    }
+    
+    Write-Host "    $icon " -ForegroundColor $color -NoNewline
+    Write-Host $Message
+}
+
+# ============================================================================
+# Header
+# ============================================================================
+
+Clear-Host
+
+Write-Host ""
+Write-Host "  ╔═══════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "  ║              DeltaPress Quick Setup v1.4                      ║" -ForegroundColor Cyan
+Write-Host "  ╚═══════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host ""
+
+# ============================================================================
+# Step 1: Windows Check (5%)
+# ============================================================================
+
+Show-Progress -Percent 5 -Message "Checking system..." -Detail "Windows version"
+
+$os = Get-CimInstance Win32_OperatingSystem
+$build = [int]$os.BuildNumber
+
+if ($build -ge 10240) {
+    Show-Step "Windows Build $build compatible" -Status "ok"
+} else {
+    Show-Step "Windows 10+ recommended (Build $build)" -Status "warn"
+}
+
+# ============================================================================
+# Step 2: Admin Check (10%)
+# ============================================================================
+
+Show-Progress -Percent 10 -Message "Checking privileges..."
+
+$currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
+$isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if ($isAdmin) {
+    Show-Step "Running as Administrator" -Status "ok"
+} else {
+    Show-Step "Standard user (some features limited)" -Status "info"
+}
+
+# ============================================================================
+# Step 3: Package Manager (15%)
+# ============================================================================
+
+Show-Progress -Percent 15 -Message "Detecting package manager..."
+
+$pkgManager = $null
+if (Get-Command winget -ErrorAction SilentlyContinue) {
+    $pkgManager = "winget"
+    Show-Step "Found: winget" -Status "ok"
+} elseif (Get-Command choco -ErrorAction SilentlyContinue) {
+    $pkgManager = "chocolatey"
+    Show-Step "Found: Chocolatey" -Status "ok"
+} elseif (Get-Command scoop -ErrorAction SilentlyContinue) {
+    $pkgManager = "scoop"
+    Show-Step "Found: Scoop" -Status "ok"
+} else {
+    Show-Step "No package manager found" -Status "warn"
+}
+
+# ============================================================================
+# Step 4: Node.js Check (20%)
+# ============================================================================
+
+Show-Progress -Percent 20 -Message "Checking Node.js..."
+
+$nodeInstalled = $false
 try {
     $nodeVersion = node --version 2>$null
     if ($nodeVersion) {
-        Write-Success "Node.js $nodeVersion installed"
+        $version = $nodeVersion -replace 'v', ''
+        $major = [int]($version -split '\.')[0]
+        
+        if ($major -ge 18) {
+            $nodeInstalled = $true
+            Show-Step "Node.js v$version installed" -Status "ok"
+        } else {
+            Show-Step "Node.js v$version (upgrade recommended)" -Status "warn"
+            $nodeInstalled = $true
+        }
+    }
+} catch {}
+
+# ============================================================================
+# Step 5: Install Node.js (20-50%)
+# ============================================================================
+
+if (-not $nodeInstalled) {
+    Show-Progress -Percent 25 -Message "Installing Node.js..." -Detail "Downloading"
+    
+    if ($pkgManager) {
+        switch ($pkgManager) {
+            "winget" {
+                Show-Progress -Percent 30 -Message "Installing Node.js..." -Detail "Using winget"
+                winget install OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements | Out-Null
+            }
+            "chocolatey" {
+                Show-Progress -Percent 30 -Message "Installing Node.js..." -Detail "Using Chocolatey"
+                choco install nodejs-lts -y | Out-Null
+            }
+            "scoop" {
+                Show-Progress -Percent 30 -Message "Installing Node.js..." -Detail "Using Scoop"
+                scoop install nodejs-lts | Out-Null
+            }
+        }
+        
+        # Refresh environment
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+        Start-Sleep -Seconds 2
+        
+        Show-Progress -Percent 50 -Message "Installing Node.js..." -Detail "Complete"
+        Show-Step "Node.js LTS installed" -Status "ok"
     } else {
-        throw "Not found"
+        Show-Step "Cannot install Node.js - no package manager" -Status "error"
+        Write-Host ""
+        Write-Host "    Please install Node.js manually from: " -NoNewline
+        Write-Host "https://nodejs.org/" -ForegroundColor Cyan
+        exit 1
+    }
+} else {
+    Show-Progress -Percent 50 -Message "Node.js ready" -Detail "Skipping install"
+    Show-Step "Node.js already installed" -Status "skip"
+}
+
+# ============================================================================
+# Step 6: npm Check (55%)
+# ============================================================================
+
+Show-Progress -Percent 55 -Message "Checking npm..."
+
+try {
+    $npmVersion = npm --version 2>$null
+    if ($npmVersion) {
+        Show-Step "npm v$npmVersion available" -Status "ok"
     }
 } catch {
-    Write-Info "Node.js not found. Installing..."
-    
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Info "Installing via winget..."
-        winget install OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
-        Write-Success "Node.js installed. Please restart terminal and run again."
-        exit 0
-    } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
-        Write-Info "Installing via Chocolatey..."
-        choco install nodejs-lts -y
-        Write-Success "Node.js installed. Please restart terminal and run again."
-        exit 0
+    Show-Step "npm not found" -Status "error"
+    exit 1
+}
+
+# ============================================================================
+# Step 7: Project Files (60%)
+# ============================================================================
+
+Show-Progress -Percent 60 -Message "Validating project..."
+
+if (-not (Test-Path "package.json")) {
+    Show-Step "package.json not found" -Status "error"
+    Write-Host ""
+    Write-Host "    Please run this script in the DeltaPress project directory" -ForegroundColor Yellow
+    exit 1
+}
+
+Show-Step "Project files validated" -Status "ok"
+
+# ============================================================================
+# Step 8: Dependencies (65-85%)
+# ============================================================================
+
+Show-Progress -Percent 65 -Message "Installing dependencies..."
+
+if ((Test-Path "node_modules") -and -not $ForceReinstall) {
+    $count = (Get-ChildItem "node_modules" -Directory -ErrorAction SilentlyContinue).Count
+    if ($count -gt 10) {
+        Show-Progress -Percent 85 -Message "Dependencies already installed" -Detail "$count packages"
+        Show-Step "Found $count packages in node_modules" -Status "skip"
     } else {
-        Write-Fail "No package manager found. Please install Node.js manually:"
-        Write-Host "  Download from: https://nodejs.org/" -ForegroundColor Yellow
+        $needInstall = $true
+    }
+} else {
+    $needInstall = $true
+}
+
+if ($needInstall) {
+    Show-Progress -Percent 70 -Message "Installing dependencies..." -Detail "npm install"
+    
+    $npmProcess = Start-Process -FilePath "npm" -ArgumentList "install", "--silent" -NoNewWindow -PassThru
+    
+    $pct = 70
+    while (-not $npmProcess.HasExited) {
+        Start-Sleep -Milliseconds 300
+        $pct = [math]::Min(84, $pct + 1)
+        Show-Progress -Percent $pct -Message "Installing dependencies..." -Detail "Please wait"
+    }
+    
+    if ($npmProcess.ExitCode -eq 0) {
+        $count = (Get-ChildItem "node_modules" -Directory -ErrorAction SilentlyContinue).Count
+        Show-Progress -Percent 85 -Message "Dependencies installed" -Detail "$count packages"
+        Show-Step "$count packages installed" -Status "ok"
+    } else {
+        Show-Step "npm install failed" -Status "error"
         exit 1
     }
 }
 
-# Step 3: Check npm
-Write-Step "Checking npm..."
-try {
-    $npmVersion = npm --version 2>$null
-    Write-Success "npm $npmVersion installed"
-} catch {
-    Write-Fail "npm not found. Reinstall Node.js."
-    exit 1
-}
+# ============================================================================
+# Step 9: Environment (90%)
+# ============================================================================
 
-# Step 4: Install dependencies
-Write-Step "Installing dependencies..."
-if (Test-Path "package.json") {
-    if ((Test-Path "node_modules") -and !$ForceInstall) {
-        Write-Info "node_modules exists. Use -ForceInstall to reinstall."
-        Write-Success "Dependencies already installed"
-    } else {
-        npm install
-        if ($LASTEXITCODE -eq 0) {
-            Write-Success "Dependencies installed"
-        } else {
-            Write-Fail "npm install failed"
-            exit 1
-        }
-    }
+Show-Progress -Percent 90 -Message "Configuring environment..."
+
+if (Test-Path ".env.local") {
+    Show-Step ".env.local exists" -Status "ok"
 } else {
-    Write-Fail "package.json not found. Run this script in the project directory."
-    exit 1
-}
-
-# Step 5: Environment setup
-Write-Step "Setting up environment..."
-if (!(Test-Path ".env.local")) {
-    Write-Info "Creating .env.local template..."
     @"
 # DeltaPress Environment Configuration
+# Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 
-# Required - Get your key from: https://aistudio.google.com/
-GEMINI_API_KEY=your_key_here
+# REQUIRED - Get your key from: https://aistudio.google.com/app/apikey
+GEMINI_API_KEY=
 
 # Optional - Additional AI Providers
 ZAI_API_KEY=
@@ -124,93 +287,68 @@ SUPABASE_ANON_KEY=
 PORT=3000
 NODE_ENV=development
 "@ | Out-File -FilePath ".env.local" -Encoding utf8
-    Write-Success "Created .env.local template"
-    Write-Host "`n  ⚠ Please edit .env.local and add your GEMINI_API_KEY!" -ForegroundColor Yellow
-} else {
-    Write-Success ".env.local exists"
     
-    # Check if API key is set
-    $envContent = Get-Content ".env.local"
-    $hasKey = $envContent | Select-String "GEMINI_API_KEY=[^\s]+$" | Where-Object { $_ -notmatch "your_key" }
-    if (!$hasKey) {
-        Write-Host "`n  ⚠ GEMINI_API_KEY not configured in .env.local!" -ForegroundColor Yellow
-    }
+    Show-Step "Created .env.local template" -Status "ok"
 }
 
-# Step 6: Docker setup (if requested)
+# ============================================================================
+# Step 10: Docker (Optional, 95%)
+# ============================================================================
+
 if ($WithDocker) {
-    Write-Step "Checking Docker..."
+    Show-Progress -Percent 93 -Message "Checking Docker..."
+    
     try {
         $dockerVersion = docker --version 2>$null
         if ($dockerVersion) {
-            Write-Success "Docker installed: $dockerVersion"
-            
-            # Check if running
-            $dockerInfo = docker info 2>&1
-            if ($dockerInfo -match "error") {
-                Write-Info "Docker not running. Starting Docker Desktop..."
-                Start-Process "${env:ProgramFiles}\Docker\Docker\Docker Desktop.exe"
-                Start-Sleep -Seconds 30
-            }
-            Write-Success "Docker is ready"
+            Show-Progress -Percent 95 -Message "Docker ready"
+            Show-Step $dockerVersion -Status "ok"
         } else {
-            throw "Not found"
+            throw "Not installed"
         }
     } catch {
-        Write-Fail "Docker not installed"
-        Write-Host "  Download Docker Desktop from: https://www.docker.com/products/docker-desktop" -ForegroundColor Yellow
-        Write-Info "Continuing without Docker..."
-        $WithDocker = $false
+        Show-Step "Docker not installed - skipping" -Status "warn"
     }
-}
-
-# Step 7: Start server
-Write-Step "Starting DeltaPress..."
-Write-Host ""
-
-if ($WithDocker) {
-    Write-Info "Building and starting Docker container..."
-    
-    # Create Dockerfile if needed
-    if (!(Test-Path "Dockerfile")) {
-        @"
-FROM node:20-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-RUN npm run build
-EXPOSE 3000
-ENV NODE_ENV=production
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 `
-  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
-CMD ["npm", "start"]
-"@ | Out-File -FilePath "Dockerfile" -Encoding utf8
-    }
-    
-    docker build -t deltapress:latest .
-    docker run -d -p 3000:3000 --name deltapress-app --env-file .env.local deltapress:latest
-    
-    Write-Success "DeltaPress running in Docker"
-    Write-Host "`n  Access at: http://localhost:3000" -ForegroundColor Cyan
-    
 } else {
-    Write-Info "Starting development server..."
-    Write-Host "`n  Starting DeltaPress..." -ForegroundColor Cyan
-    Write-Host "  Access at: http://localhost:3000" -ForegroundColor Cyan
-    Write-Host "  Press Ctrl+C to stop`n" -ForegroundColor DarkGray
-    
-    npm run dev
+    Show-Progress -Percent 95 -Message "Skipping Docker..."
 }
 
-Write-Host @"
+# ============================================================================
+# Step 11: Start Server (100%)
+# ============================================================================
 
-╔═══════════════════════════════════════════════════════════════╗
-║                    Setup Complete!                            ║
-╠═══════════════════════════════════════════════════════════════╣
-║  Application:  http://localhost:3000                          ║
-║  Admin Panel:  http://localhost:3000/#/admin                  ║
-║  Health Check: http://localhost:3000/api/health               ║
-╚═══════════════════════════════════════════════════════════════╝
+Show-Progress -Percent 98 -Message "Starting DeltaPress..."
 
-"@ 
+$env:PORT = 3000
+
+# Start server
+$startInfo = New-Object System.Diagnostics.ProcessStartInfo
+$startInfo.FileName = "npm"
+$startInfo.Arguments = "run dev"
+$startInfo.UseShellExecute = $true
+$startInfo.CreateNoWindow = $false
+
+$process = [System.Diagnostics.Process]::Start($startInfo)
+
+Show-Progress -Percent 100 -Message "Complete!"
+Show-Step "Server started (PID: $($process.Id))" -Status "ok"
+
+Start-Sleep -Seconds 3
+Start-Process "http://localhost:3000"
+
+# ============================================================================
+# Summary
+# ============================================================================
+
+Write-Host ""
+Write-Host "  ╔═══════════════════════════════════════════════════════════════╗" -ForegroundColor Green
+Write-Host "  ║              ✓ Setup Complete!                                ║" -ForegroundColor Green
+Write-Host "  ╚═══════════════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host ""
+Write-Host "  🌐 Application: " -NoNewline
+Write-Host "http://localhost:3000" -ForegroundColor Cyan
+Write-Host "  🔧 Admin Panel: " -NoNewline
+Write-Host "http://localhost:3000/#/admin" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  ⚠️  Edit .env.local and add your GEMINI_API_KEY!" -ForegroundColor Yellow
+Write-Host ""

@@ -384,6 +384,70 @@ async function startServer() {
     });
   });
   
+  // API Settings endpoint for admin panel
+  app.get("/api/api-settings", (req: Request, res: Response) => {
+    // Provider status
+    const providers = [
+      {
+        id: 'GEMINI',
+        name: 'Google Gemini',
+        hasKeys: !!(process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('http')),
+        keyCount: process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('http') ? 1 : 0,
+        inCooldown: false,
+        models: ['gemini-2.0-flash', 'gemini-1.5-flash'],
+        status: process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('http') ? 'active' : 'missing'
+      },
+      {
+        id: 'ZAI',
+        name: 'Zhipu AI',
+        hasKeys: !!(process.env.ZAI_API_KEY && !process.env.ZAI_API_KEY.startsWith('http')),
+        keyCount: process.env.ZAI_API_KEY ? process.env.ZAI_API_KEY.split(',').filter(k => k.trim().length > 10).length : 0,
+        inCooldown: false,
+        models: ['glm-4-flash', 'glm-4', 'glm-3-turbo'],
+        status: process.env.ZAI_API_KEY && !process.env.ZAI_API_KEY.startsWith('http') ? 'active' : 'missing'
+      },
+      {
+        id: 'ML',
+        name: 'AI/ML API',
+        hasKeys: !!(process.env.ML_API_KEY && !process.env.ML_API_KEY.startsWith('http')),
+        keyCount: process.env.ML_API_KEY ? process.env.ML_API_KEY.split(',').filter(k => k.trim().length > 10).length : 0,
+        inCooldown: false,
+        models: ['gpt-4o'],
+        status: process.env.ML_API_KEY && !process.env.ML_API_KEY.startsWith('http') ? 'active' : 'missing'
+      },
+      {
+        id: 'KIMI',
+        name: 'Moonshot Kimi',
+        hasKeys: !!(process.env.KIMI_API_KEY && !process.env.KIMI_API_KEY.startsWith('http')),
+        keyCount: process.env.KIMI_API_KEY ? process.env.KIMI_API_KEY.split(',').filter(k => k.trim().length > 10).length : 0,
+        inCooldown: false,
+        models: ['moonshot-v1-8k'],
+        status: process.env.KIMI_API_KEY && !process.env.KIMI_API_KEY.startsWith('http') ? 'active' : 'missing'
+      }
+    ];
+    
+    // Environment status (never expose actual values for secrets)
+    const envStatus = [
+      { name: 'GEMINI_API_KEY', configured: !!(process.env.GEMINI_API_KEY), isSecret: true },
+      { name: 'ZAI_API_KEY', configured: !!(process.env.ZAI_API_KEY), isSecret: true },
+      { name: 'ML_API_KEY', configured: !!(process.env.ML_API_KEY), isSecret: true },
+      { name: 'KIMI_API_KEY', configured: !!(process.env.KIMI_API_KEY), isSecret: true },
+      { name: 'SUPABASE_URL', configured: !!(process.env.SUPABASE_URL), isSecret: false, preview: process.env.SUPABASE_URL ? `${process.env.SUPABASE_URL.substring(0, 30)}...` : undefined },
+      { name: 'SUPABASE_ANON_KEY', configured: !!(process.env.SUPABASE_ANON_KEY), isSecret: true },
+      { name: 'CORS_ORIGINS', configured: !!(process.env.CORS_ORIGINS), isSecret: false, preview: process.env.CORS_ORIGINS || 'localhost defaults' },
+      { name: 'PORT', configured: !!(process.env.PORT), isSecret: false, preview: process.env.PORT || '3000' },
+      { name: 'NODE_ENV', configured: !!(process.env.NODE_ENV), isSecret: false, preview: process.env.NODE_ENV || 'development' }
+    ];
+    
+    res.json({
+      cors: CONFIG.CORS,
+      providers,
+      envStatus,
+      rateLimits: CONFIG.RATE_LIMITS,
+      modelConfigs: MODEL_CONFIGS
+    });
+  });
+  
   // ========================================================================
   // Research Proxy Endpoint (OpenAI-compatible providers)
   // ========================================================================

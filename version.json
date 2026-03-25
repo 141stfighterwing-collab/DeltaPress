@@ -1,15 +1,27 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "name": "DeltaPress",
   "releaseDate": "2025-03-26",
   "changes": [
-    "CORS handling with configurable origins",
-    "API rate limiting per provider with cooldown",
-    "Model-specific configurations for optimal performance",
-    "Enhanced error handling and retry logic",
-    "PDF documentation for technical reference"
+    "Admin API Settings view for CORS, ENV, and API visibility",
+    "RBAC permission system with role hierarchy",
+    "API provider status dashboard for administrators",
+    "Enhanced security with secret value protection",
+    "Updated documentation with screenshots and PDF links"
   ],
   "patches": [
+    {
+      "version": "1.3.0",
+      "date": "2025-03-26",
+      "changes": [
+        "Admin API Settings view for CORS/ENV/API visibility",
+        "RBAC (Role-Based Access Control) system implementation",
+        "API provider status dashboard with key count and cooldown status",
+        "Environment variable status with secret protection",
+        "Model configurations display in admin panel",
+        "Enhanced role permissions: Admin, Editor, Reviewer, User"
+      ]
+    },
     {
       "version": "1.2.0",
       "date": "2025-03-26",

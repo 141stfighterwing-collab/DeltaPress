@@ -5,11 +5,11 @@ It combines a traditional publishing UI (posts, pages, admin views) with an auto
 
 ## Version
 
-**Current Version: 1.2.0**
+**Current Version: 1.3.0**
 
 | Property | Value |
 |----------|-------|
-| Version | 1.2.0 |
+| Version | 1.3.0 |
 | Release Date | 2025-03-26 |
 | Status | Stable |
 
@@ -57,6 +57,8 @@ See [Version History](#version-history) for changelog.
 - **CORS handling** with configurable origin whitelisting.
 - **API rate limiting** with per-provider configuration.
 - **Model-specific configurations** for optimal API performance.
+- **RBAC (Role-Based Access Control)** for secure admin access.
+- **Admin API Settings view** for CORS, ENV, and API visibility.
 
 ## Quick start
 
@@ -237,6 +239,88 @@ The system adapts request format per model:
 }
 ```
 
+## Role-Based Access Control (RBAC)
+
+DeltaPress implements a comprehensive RBAC system for secure admin access management.
+
+### Role Hierarchy
+
+| Role | Level | Description |
+|------|-------|-------------|
+| **Admin** | 100 | Full system access including user management, API configuration, and site settings |
+| **Editor** | 75 | Can create, edit, and publish content. Can manage journalists and media |
+| **Reviewer** | 50 | Read-only access to admin panel. Can view analytics and diagnostics |
+| **User** | 25 | Standard user with no administrative privileges |
+
+### Permission Matrix
+
+| Permission | Admin | Editor | Reviewer | User |
+|------------|:-----:|:------:|:--------:|:----:|
+| Manage Users | ✓ | ✗ | ✗ | ✗ |
+| Manage Posts | ✓ | ✓ | ✗ | ✗ |
+| Publish Posts | ✓ | ✓ | ✗ | ✗ |
+| Delete Posts | ✓ | ✓ | ✗ | ✗ |
+| Manage Settings | ✓ | ✗ | ✗ | ✗ |
+| View API Keys | ✓ | ✗ | ✗ | ✗ |
+| Manage Journalists | ✓ | ✓ | ✗ | ✗ |
+| View Diagnostics | ✓ | ✓ | ✓ | ✗ |
+| View Analytics | ✓ | ✓ | ✓ | ✗ |
+| Manage Media | ✓ | ✓ | ✗ | ✗ |
+| Manage SEO | ✓ | ✓ | ✗ | ✗ |
+
+### Endpoint Access Control
+
+| Endpoint | Minimum Role |
+|----------|-------------|
+| `/admin` | Reviewer |
+| `/admin/posts` | Editor |
+| `/admin/users` | Admin |
+| `/admin/settings` | Admin |
+| `/admin/api-settings` | Admin |
+| `/admin/analytics` | Reviewer |
+| `/admin/diagnostics` | Reviewer |
+| `/admin/journalists` | Editor |
+
+### Usage in Code
+
+```typescript
+import { hasPermission, canAccessEndpoint, getRolePermissions } from './services/rbac';
+
+// Check if user has specific permission
+if (hasPermission(userRole, 'canManageUsers')) {
+  // Allow user management
+}
+
+// Check endpoint access
+if (canAccessEndpoint(userRole, '/admin/api-settings')) {
+  // Show API Settings menu item
+}
+
+// Get all permissions for a role
+const permissions = getRolePermissions('editor');
+```
+
+## Admin API Settings View
+
+The Admin API Settings view provides administrators with visibility into CORS configuration, environment variables status, and AI provider health.
+
+### Features
+
+- **AI Providers Tab**: View provider status, API key count, models, and rate limits
+- **CORS Tab**: Display allowed origins, methods, headers, and settings
+- **Environment Tab**: Show configuration status for all environment variables (secrets are masked)
+- **Models Tab**: Display model-specific configurations and parameters
+
+### Access
+
+Navigate to **Admin → API Settings** (Admin role required).
+
+### Security
+
+- Secret values are never exposed in the admin panel
+- Only configuration status is shown (configured/missing)
+- RBAC ensures only administrators can access this view
+
 ## PowerShell Diagnostic Scripts
 
 DeltaPress includes comprehensive PowerShell diagnostic scripts for monitoring application health, database connectivity, and log analysis.
@@ -350,6 +434,13 @@ DeltaPress uses semantic versioning (SemVer) with automated version management.
 <details>
 <summary>Click to expand version history</summary>
 
+#### v1.3.0 (2025-03-26)
+- Admin API Settings view for CORS, ENV, and API visibility
+- RBAC (Role-Based Access Control) system implementation
+- API provider status dashboard with key count and cooldown status
+- Environment variable status with secret protection
+- Enhanced role permissions: Admin, Editor, Reviewer, User
+
 #### v1.2.0 (2025-03-26)
 - CORS handling with configurable origins
 - API rate limiting per provider
@@ -449,6 +540,21 @@ POST /api/proxy-gemini-research
 ```
 
 Proxies requests to AI providers with CORS protection and rate limiting.
+
+### API Settings
+
+```
+GET /api/api-settings
+```
+
+Returns CORS configuration, provider status, environment variable status, and model configurations. Admin role required.
+
+**Response includes:**
+- `cors`: Allowed origins, methods, headers, credentials setting
+- `providers`: AI provider status with key counts and models
+- `envStatus`: Environment variable configuration status (secrets masked)
+- `rateLimits`: Per-provider rate limit configuration
+- `modelConfigs`: Model-specific parameters
 
 ## Testing
 

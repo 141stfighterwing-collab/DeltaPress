@@ -24,6 +24,7 @@ import JournalistsView from './views/Admin/JournalistsView';
 import RssFeedsView from './views/Admin/RssFeedsView';
 import PagesListView from './views/Admin/PagesListView';
 import SeoView from './views/Admin/SeoView';
+import ApiSettingsView from './views/Admin/ApiSettingsView';
 
 const App: React.FC = () => {
   useEffect(() => {
@@ -55,6 +56,7 @@ const App: React.FC = () => {
         <Route path="/admin/settings" element={<SettingsView />} />
         <Route path="/admin/appearance" element={<AppearanceView />} />
         <Route path="/admin/seo" element={<SeoView />} />
+        <Route path="/admin/api-settings" element={<ApiSettingsView />} />
         <Route path="/admin/diagnostics" element={<DiagnosticsView />} />
         <Route path="/admin/journalists" element={<JournalistsView />} />
         <Route path="/admin/rss" element={<RssFeedsView />} />

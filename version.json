@@ -1,15 +1,32 @@
 {
-  "version": "1.6.0",
+  "version": "1.7.0",
   "name": "DeltaPress",
   "releaseDate": "2025-03-26",
   "changes": [
-    "Database installation support (PostgreSQL, MySQL, MongoDB)",
-    "Auto-configuration of database tables and schema",
-    "Secure credential generation for app and database",
-    "Credentials file with automatic .gitignore protection",
-    "Docker container support for databases"
+    "Custom branding and logo management",
+    "Login page customization with logos and backgrounds",
+    "Custom header HTML and scripts support",
+    "Color scheme configuration",
+    "Custom CSS injection"
   ],
   "patches": [
+    {
+      "version": "1.7.0",
+      "date": "2025-03-26",
+      "changes": [
+        "Custom branding settings with site name and tagline",
+        "Site logo upload and URL configuration",
+        "Login page logo customization",
+        "Login page background color and image support",
+        "Custom header HTML injection",
+        "Header and footer scripts (analytics, tracking codes)",
+        "Primary, secondary, and accent color configuration",
+        "Custom CSS editor with live preview",
+        "Favicon customization",
+        "Branding API endpoints (GET, PUT, POST, RESET)",
+        "Logo upload API with base64 support"
+      ]
+    },
     {
       "version": "1.6.0",
       "date": "2025-03-26",

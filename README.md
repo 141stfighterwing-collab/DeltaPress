@@ -22,15 +22,59 @@ DeltaPress combines a traditional publishing UI (posts, pages, admin views) with
 
 ## Version
 
-**Current Version: 1.6.0**
+**Current Version: 1.7.0**
 
 | Property | Value |
 |----------|-------|
-| Version | 1.6.0 |
+| Version | 1.7.0 |
 | Release Date | 2025-03-26 |
 | Status | Stable |
 
 See [Version History](#version-history) for changelog.
+
+## 🎨 Branding & Customization
+
+DeltaPress v1.7.0 introduces comprehensive branding and customization features:
+
+### Site Branding
+- **Custom Site Name & Tagline** - Configure your brand identity
+- **Site Logo** - Upload or URL-based logo configuration
+- **Favicon** - Custom browser tab icon
+- **Logo Dimensions** - Adjustable width and height
+
+### Login Page Customization
+- **Custom Login Logo** - Separate logo for login page
+- **Background Color** - Custom login page background
+- **Background Image** - Full-screen login backgrounds
+- **Dynamic Branding** - Colors and styles from admin settings
+
+### Headers & Scripts
+- **Custom Header HTML** - Inject custom HTML into site header
+- **Header Scripts** - Analytics, tracking codes in `<head>`
+- **Footer Scripts** - Scripts before `</body>`
+
+### Color Scheme
+- **Primary Color** - Main brand color
+- **Secondary Color** - Accent and highlights
+- **Accent Color** - Links and buttons
+
+### Custom CSS
+- **Live CSS Editor** - Real-time style customization
+- **CSS Variables** - Override default styles
+- **Preview Mode** - See changes before saving
+
+### Branding API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/branding` | GET | Get all branding settings |
+| `/api/branding` | PUT | Update branding settings |
+| `/api/branding/reset` | POST | Reset to defaults |
+| `/api/branding/upload-logo` | POST | Upload logo (base64) |
+
+### Access Branding Settings
+
+Navigate to **Admin → Branding** (Admin role required).
 
 ## 📸 Screenshots
 

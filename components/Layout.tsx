@@ -16,6 +16,42 @@ interface PageLink {
   children?: PageLink[];
 }
 
+interface BrandingSettings {
+  site_name: string;
+  site_tagline: string;
+  site_logo_url: string;
+  site_favicon_url: string;
+  header_custom_html: string;
+  header_scripts: string;
+  footer_scripts: string;
+  primary_color: string;
+  secondary_color: string;
+  accent_color: string;
+  custom_css: string;
+  show_site_name: boolean;
+  show_tagline: boolean;
+  logo_width: number;
+  logo_height: number;
+}
+
+const DEFAULT_BRANDING: BrandingSettings = {
+  site_name: 'DeltaPress',
+  site_tagline: 'AI-Powered Newsroom Platform',
+  site_logo_url: '',
+  site_favicon_url: '',
+  header_custom_html: '',
+  header_scripts: '',
+  footer_scripts: '',
+  primary_color: '#1a365d',
+  secondary_color: '#00bcd4',
+  accent_color: '#3b82f6',
+  custom_css: '',
+  show_site_name: true,
+  show_tagline: true,
+  logo_width: 200,
+  logo_height: 60
+};
+
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const [isAdmin, setIsAdmin] = useState(false);
@@ -23,6 +59,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [navPages, setNavPages] = useState<PageLink[]>([]);
+  const [branding, setBranding] = useState<BrandingSettings>(DEFAULT_BRANDING);
   const [settings, setSettings] = useState({
     title: 'Twenty Ten',
     slogan: 'Just another WordPress theme',
@@ -42,6 +79,63 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     seo_og_image: '',
     seo_canonical_url: ''
   });
+
+  // Apply custom CSS and scripts
+  useEffect(() => {
+    // Apply custom CSS
+    if (branding.custom_css) {
+      let styleEl = document.getElementById('custom-branding-css');
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'custom-branding-css';
+        document.head.appendChild(styleEl);
+      }
+      styleEl.textContent = branding.custom_css;
+    }
+
+    // Apply header scripts
+    if (branding.header_scripts) {
+      const scriptEl = document.createElement('div');
+      scriptEl.id = 'custom-header-scripts';
+      scriptEl.innerHTML = branding.header_scripts;
+      document.head.appendChild(scriptEl);
+    }
+
+    // Apply favicon
+    if (branding.site_favicon_url) {
+      let faviconEl = document.querySelector('link[rel="icon"]') as HTMLLinkElement;
+      if (!faviconEl) {
+        faviconEl = document.createElement('link');
+        faviconEl.rel = 'icon';
+        document.head.appendChild(faviconEl);
+      }
+      faviconEl.href = branding.site_favicon_url;
+    }
+
+    return () => {
+      // Cleanup on unmount
+      const customCss = document.getElementById('custom-branding-css');
+      if (customCss) customCss.remove();
+      
+      const headerScripts = document.getElementById('custom-header-scripts');
+      if (headerScripts) headerScripts.remove();
+    };
+  }, [branding.custom_css, branding.header_scripts, branding.site_favicon_url]);
+
+  // Apply footer scripts
+  useEffect(() => {
+    if (branding.footer_scripts) {
+      const scriptEl = document.createElement('div');
+      scriptEl.id = 'custom-footer-scripts';
+      scriptEl.innerHTML = branding.footer_scripts;
+      document.body.appendChild(scriptEl);
+    }
+
+    return () => {
+      const footerScripts = document.getElementById('custom-footer-scripts');
+      if (footerScripts) footerScripts.remove();
+    };
+  }, [branding.footer_scripts]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -77,6 +171,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         if (profile?.role === 'admin' || profile?.role === 'editor') setIsAdmin(true);
       }
       
+      // Fetch site settings from Supabase
       const { data: siteSettings } = await supabase.from('site_settings').select('*').eq('id', 1).maybeSingle();
       if (siteSettings) {
         setSettings({
@@ -98,6 +193,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           seo_og_image: siteSettings.seo_og_image || '',
           seo_canonical_url: siteSettings.seo_canonical_url || ''
         });
+      }
+
+      // Fetch branding settings from API
+      try {
+        const brandingResponse = await fetch('/api/branding');
+        const brandingData = await brandingResponse.json();
+        if (brandingData.success && brandingData.branding) {
+          setBranding({ ...DEFAULT_BRANDING, ...brandingData.branding });
+        }
+      } catch (error) {
+        console.error('Failed to fetch branding:', error);
       }
 
       const { data: pages } = await supabase

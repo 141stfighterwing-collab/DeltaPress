@@ -7,8 +7,9 @@
  * - Request timeout handling
  * - Model-specific configurations
  * - Error handling and logging
+ * - Branding and customization API
  * 
- * @version 1.1.0
+ * @version 1.7.0
  */
 
 import express, { Request, Response, NextFunction } from "express";
@@ -445,6 +446,155 @@ async function startServer() {
       envStatus,
       rateLimits: CONFIG.RATE_LIMITS,
       modelConfigs: MODEL_CONFIGS
+    });
+  });
+  
+  // ========================================================================
+  // Branding API Endpoints
+  // ========================================================================
+  
+  // Default branding configuration
+  const DEFAULT_BRANDING = {
+    site_name: 'DeltaPress',
+    site_tagline: 'AI-Powered Newsroom Platform',
+    site_logo_url: '',
+    site_favicon_url: '',
+    login_logo_url: '',
+    login_background_url: '',
+    login_background_color: '#1a365d',
+    header_custom_html: '',
+    header_scripts: '',
+    footer_scripts: '',
+    primary_color: '#1a365d',
+    secondary_color: '#00bcd4',
+    accent_color: '#3b82f6',
+    custom_css: '',
+    show_site_name: true,
+    show_tagline: true,
+    logo_width: 200,
+    logo_height: 60,
+    login_logo_width: 200,
+    login_logo_height: 80
+  };
+  
+  // In-memory branding store (replace with database in production)
+  let brandingSettings = { ...DEFAULT_BRANDING };
+  
+  // Get branding settings
+  app.get("/api/branding", (req: Request, res: Response) => {
+    LOG.info('BRANDING', 'Fetching branding settings');
+    res.json({
+      success: true,
+      branding: brandingSettings
+    });
+  });
+  
+  // Update branding settings
+  app.put("/api/branding", (req: Request, res: Response) => {
+    const updates = req.body;
+    
+    LOG.info('BRANDING', 'Updating branding settings', Object.keys(updates));
+    
+    // Validate and sanitize updates
+    const allowedFields = [
+      'site_name', 'site_tagline', 'site_logo_url', 'site_favicon_url',
+      'login_logo_url', 'login_background_url', 'login_background_color',
+      'header_custom_html', 'header_scripts', 'footer_scripts',
+      'primary_color', 'secondary_color', 'accent_color', 'custom_css',
+      'show_site_name', 'show_tagline', 'logo_width', 'logo_height',
+      'login_logo_width', 'login_logo_height'
+    ];
+    
+    const sanitizedUpdates: Record<string, any> = {};
+    for (const [key, value] of Object.entries(updates)) {
+      if (allowedFields.includes(key)) {
+        // Sanitize string values
+        if (typeof value === 'string') {
+          // Basic XSS prevention for HTML/scripts
+          if (key === 'header_custom_html' || key === 'custom_css') {
+            sanitizedUpdates[key] = value;
+          } else if (key === 'header_scripts' || key === 'footer_scripts') {
+            sanitizedUpdates[key] = value;
+          } else {
+            sanitizedUpdates[key] = value.slice(0, 2000); // Limit string length
+          }
+        } else if (typeof value === 'boolean' || typeof value === 'number') {
+          sanitizedUpdates[key] = value;
+        }
+      }
+    }
+    
+    brandingSettings = { ...brandingSettings, ...sanitizedUpdates };
+    
+    LOG.success('BRANDING', 'Branding settings updated');
+    res.json({
+      success: true,
+      branding: brandingSettings,
+      message: 'Branding settings updated successfully'
+    });
+  });
+  
+  // Reset branding to defaults
+  app.post("/api/branding/reset", (req: Request, res: Response) => {
+    LOG.info('BRANDING', 'Resetting branding to defaults');
+    brandingSettings = { ...DEFAULT_BRANDING };
+    
+    res.json({
+      success: true,
+      branding: brandingSettings,
+      message: 'Branding settings reset to defaults'
+    });
+  });
+  
+  // Upload logo (base64)
+  app.post("/api/branding/upload-logo", (req: Request, res: Response) => {
+    const { type, data, filename } = req.body;
+    
+    if (!data || !type) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: type, data'
+      });
+    }
+    
+    // Validate base64 image data
+    if (!data.startsWith('data:image/')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid image data. Must be base64 encoded image.'
+      });
+    }
+    
+    // In production, save to cloud storage (S3, etc.)
+    // For now, store as data URL
+    const logoUrl = data;
+    
+    switch (type) {
+      case 'site_logo':
+        brandingSettings.site_logo_url = logoUrl;
+        break;
+      case 'login_logo':
+        brandingSettings.login_logo_url = logoUrl;
+        break;
+      case 'favicon':
+        brandingSettings.site_favicon_url = logoUrl;
+        break;
+      case 'login_background':
+        brandingSettings.login_background_url = logoUrl;
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid logo type. Use: site_logo, login_logo, favicon, login_background'
+        });
+    }
+    
+    LOG.success('BRANDING', `Logo uploaded: ${type}`);
+    res.json({
+      success: true,
+      url: logoUrl,
+      type,
+      message: 'Logo uploaded successfully'
     });
   });
   

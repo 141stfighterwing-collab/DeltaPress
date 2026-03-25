@@ -5,11 +5,11 @@ It combines a traditional publishing UI (posts, pages, admin views) with an auto
 
 ## Version
 
-**Current Version: 1.3.0**
+**Current Version: 1.4.0**
 
 | Property | Value |
 |----------|-------|
-| Version | 1.3.0 |
+| Version | 1.4.0 |
 | Release Date | 2025-03-26 |
 | Status | Stable |
 
@@ -434,6 +434,14 @@ DeltaPress uses semantic versioning (SemVer) with automated version management.
 <details>
 <summary>Click to expand version history</summary>
 
+#### v1.4.0 (2025-03-26)
+- Windows PowerShell rollout script for full deployment
+- Automatic dependency and Node.js installation
+- Docker and Host server deployment options
+- Windows Service management for production
+- Environment configuration helper with API key validation
+- Real-time logging with color-coded status indicators
+
 #### v1.3.0 (2025-03-26)
 - Admin API Settings view for CORS, ENV, and API visibility
 - RBAC (Role-Based Access Control) system implementation
@@ -577,6 +585,150 @@ npm run test:unit
 
 # View test report
 npx playwright show-report
+```
+
+## Windows Deployment (PowerShell)
+
+DeltaPress includes comprehensive PowerShell scripts for Windows deployment with automatic dependency installation, Docker/Host deployment options, and Windows Service management.
+
+### Quick Setup (Recommended)
+
+For a one-click setup experience:
+
+```powershell
+# Download and run quick setup
+.\scripts\powershell\quick-setup.ps1
+
+# With Docker deployment
+.\scripts\powershell\quick-setup.ps1 -WithDocker
+
+# Force reinstall dependencies
+.\scripts\powershell\quick-setup.ps1 -ForceInstall
+```
+
+### Full Rollout Script
+
+The `rollout.ps1` script provides comprehensive deployment with real-time logging:
+
+```powershell
+# Host deployment (default)
+.\scripts\powershell\rollout.ps1 -Mode Host
+
+# Docker deployment
+.\scripts\powershell\rollout.ps1 -Mode Docker
+
+# Check system requirements only
+.\scripts\powershell\rollout.ps1 -Mode CheckOnly
+
+# With automatic Node.js installation
+.\scripts\powershell\rollout.ps1 -Mode Host -InstallNodeJS
+
+# With automatic Docker installation
+.\scripts\powershell\rollout.ps1 -Mode Docker -InstallDocker
+
+# Custom port and environment file
+.\scripts\powershell\rollout.ps1 -Mode Host -Port 8080 -EnvFile ".env.production"
+
+# Verbose logging
+.\scripts\powershell\rollout.ps1 -Mode Host -Verbose -LogPath ".\deploy.log"
+```
+
+### Environment Configuration
+
+Interactive environment configuration:
+
+```powershell
+# Interactive configuration
+.\scripts\powershell\configure-env.ps1
+
+# Non-interactive with parameters
+.\scripts\powershell\configure-env.ps1 -NonInteractive `
+    -GEMINI_API_KEY "your-key" `
+    -Port 3000 `
+    -CORS_ORIGINS "https://example.com"
+```
+
+### Windows Service Management
+
+Deploy DeltaPress as a Windows Service for production:
+
+```powershell
+# Install as Windows Service (requires Administrator)
+.\scripts\powershell\service-manager.ps1 -Action Install
+
+# Start service
+.\scripts\powershell\service-manager.ps1 -Action Start
+
+# Check status
+.\scripts\powershell\service-manager.ps1 -Action Status
+
+# Stop service
+.\scripts\powershell\service-manager.ps1 -Action Stop
+
+# Restart service
+.\scripts\powershell\service-manager.ps1 -Action Restart
+
+# Remove service
+.\scripts\powershell\service-manager.ps1 -Action Uninstall
+```
+
+### Rollout Script Features
+
+| Feature | Description |
+|---------|-------------|
+| **Prerequisites Check** | Validates Windows version, admin rights, package managers |
+| **Node.js Installation** | Auto-installs via winget, Chocolatey, or Scoop |
+| **Docker Support** | Auto-installs Docker Desktop, builds images, runs containers |
+| **Host Deployment** | Local server deployment with dependency management |
+| **Real-time Logging** | Timestamped logs with color-coded status indicators |
+| **Error Handling** | Comprehensive error capture and recovery suggestions |
+| **Health Checks** | Automatic application health verification |
+| **Report Generation** | Detailed deployment reports in JSON and text formats |
+
+### Rollout Script Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `-Mode` | Deployment mode: Docker, Host, CheckOnly | Host |
+| `-InstallNodeJS` | Automatically install Node.js if missing | false |
+| `-InstallDocker` | Automatically install Docker if missing | false |
+| `-Port` | Server port number | 3000 |
+| `-EnvFile` | Environment file path | .env.local |
+| `-SkipDependencies` | Skip npm install step | false |
+| `-Verbose` | Enable verbose output | false |
+| `-LogPath` | Custom log file path | ./rollout-{timestamp}.log |
+
+### Deployment Modes
+
+#### Host Mode
+- Installs npm dependencies
+- Validates configuration
+- Starts development/production server
+- Opens browser automatically
+
+#### Docker Mode
+- Checks/installs Docker Desktop
+- Creates Dockerfile if missing
+- Builds Docker image
+- Runs container with environment variables
+- Configures health checks and logging
+
+#### CheckOnly Mode
+- Validates system requirements
+- Checks Node.js version
+- Verifies project files
+- Validates configuration
+- No deployment performed
+
+### Logging Format
+
+```
+[HH:mm:ss.fff] ════════ Section Header
+[HH:mm:ss.fff] ✓ PASS   Success message
+[HH:mm:ss.fff] ⚠ WARN   Warning message
+[HH:mm:ss.fff] ✗ FAIL   Error message
+[HH:mm:ss.fff] ► INFO   Informational message
+[HH:mm:ss.fff]   ·      Detail message
 ```
 
 ## Deployment notes

@@ -1,15 +1,30 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "name": "DeltaPress",
   "releaseDate": "2025-03-26",
   "changes": [
-    "Admin API Settings view for CORS, ENV, and API visibility",
-    "RBAC permission system with role hierarchy",
-    "API provider status dashboard for administrators",
-    "Enhanced security with secret value protection",
-    "Updated documentation with screenshots and PDF links"
+    "Windows PowerShell rollout script for full deployment",
+    "Automatic dependency and Node.js installation",
+    "Docker and Host server deployment options",
+    "Windows Service management for production",
+    "Environment configuration helper with API key validation"
   ],
   "patches": [
+    {
+      "version": "1.4.0",
+      "date": "2025-03-26",
+      "changes": [
+        "Comprehensive PowerShell rollout script for Windows",
+        "Automatic Node.js installation via winget/Chocolatey/Scoop",
+        "Docker deployment with auto-install and container management",
+        "Host deployment with dependency management",
+        "Windows Service integration using NSSM",
+        "Environment configuration helper script",
+        "Real-time logging with color-coded status indicators",
+        "Error handling and recovery suggestions",
+        "Health checks and deployment reporting"
+      ]
+    },
     {
       "version": "1.3.0",
       "date": "2025-03-26",

@@ -1,15 +1,29 @@
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
   "name": "DeltaPress",
   "releaseDate": "2025-03-26",
   "changes": [
-    "Windows PowerShell rollout script for full deployment",
-    "Automatic dependency and Node.js installation",
-    "Docker and Host server deployment options",
-    "Windows Service management for production",
-    "Environment configuration helper with API key validation"
+    "Rugged one-click installer with visual progress bar",
+    "Validation mode for testing without changes",
+    "Comprehensive FAQ documentation",
+    "Enhanced error handling with solutions"
   ],
   "patches": [
+    {
+      "version": "1.5.0",
+      "date": "2025-03-26",
+      "changes": [
+        "Rugged all-encompassing installer with progress bar",
+        "Real-time percentage display (0-100%)",
+        "Prerequisite checks before any installation",
+        "Retry logic with configurable attempts",
+        "Critical step detection with automatic halt on failure",
+        "Validation mode (-ValidateOnly) for testing",
+        "Comprehensive error messages with solutions",
+        "Installation log and report generation",
+        "FAQ documentation covering all common issues"
+      ]
+    },
     {
       "version": "1.4.0",
       "date": "2025-03-26",

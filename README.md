@@ -5,11 +5,11 @@ It combines a traditional publishing UI (posts, pages, admin views) with an auto
 
 ## Version
 
-**Current Version: 1.4.0**
+**Current Version: 1.5.0**
 
 | Property | Value |
 |----------|-------|
-| Version | 1.4.0 |
+| Version | 1.5.0 |
 | Release Date | 2025-03-26 |
 | Status | Stable |
 
@@ -576,6 +576,17 @@ DeltaPress uses semantic versioning (SemVer) with automated version management.
 <details>
 <summary>Click to expand version history</summary>
 
+#### v1.5.0 (2025-03-26)
+- Rugged one-click installer with visual progress bar (0-100%)
+- Real-time percentage display during installation
+- Prerequisite validation before any changes
+- Retry logic with configurable attempts (default: 3)
+- Critical step detection with automatic halt
+- Validation mode (-ValidateOnly) for testing
+- Comprehensive error messages with solutions
+- Installation log and report generation
+- FAQ documentation for all common issues
+
 #### v1.4.0 (2025-03-26)
 - Windows PowerShell rollout script for full deployment
 - Automatic dependency and Node.js installation
@@ -880,6 +891,233 @@ Deploy DeltaPress as a Windows Service for production:
 3. Ensure all runtime environment variables are set
 4. Configure CORS origins for your domain
 5. Use PowerShell diagnostic scripts for monitoring
+
+## ❓ FAQ (Frequently Asked Questions)
+
+### Installation Issues
+
+#### Q: The installer says "No package manager found"
+**A:** You need a Windows package manager. Install one of these:
+```powershell
+# Option 1: winget (Windows 11 / Windows 10 1709+)
+# Install from Microsoft Store: Search "App Installer"
+
+# Option 2: Chocolatey
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# Option 3: Scoop
+irm get.scoop.sh | iex
+```
+
+#### Q: Node.js installation failed
+**A:** Try these solutions:
+1. Run PowerShell as Administrator
+2. Install Node.js manually from https://nodejs.org/ (LTS version)
+3. Restart PowerShell after installation
+4. Run `node --version` to verify
+
+#### Q: "npm not found" after Node.js install
+**A:** This happens when PATH isn't refreshed:
+1. Close all PowerShell windows
+2. Open a new PowerShell window
+3. Run `npm --version` to verify
+4. If still failing, restart your computer
+
+#### Q: npm install fails with errors
+**A:** Common solutions:
+```powershell
+# Clear npm cache
+npm cache clean --force
+
+# Delete node_modules and reinstall
+Remove-Item -Recurse -Force node_modules
+Remove-Item package-lock.json
+npm install
+
+# Use different registry if corporate firewall blocks
+npm install --registry https://registry.npmmirror.com
+```
+
+#### Q: PowerShell execution policy blocks scripts
+**A:** Run this command first:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+### Runtime Issues
+
+#### Q: Server won't start - "Port 3000 in use"
+**A:** Either change the port or kill the existing process:
+```powershell
+# Find process using port 3000
+netstat -ano | findstr :3000
+
+# Kill process (replace PID with actual process ID)
+taskkill /PID <PID> /F
+
+# Or use a different port
+.\scripts\powershell\install.ps1 -Port 8080
+```
+
+#### Q: "GEMINI_API_KEY not configured" error
+**A:** You must configure your API key:
+1. Edit `.env.local` file
+2. Add your Gemini API key: `GEMINI_API_KEY=your_key_here`
+3. Get a FREE key at https://aistudio.google.com/app/apikey
+4. Restart the server: `npm run dev`
+
+#### Q: CORS errors in browser
+**A:** Update CORS settings in `.env.local`:
+```bash
+# For development
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# For production
+CORS_ORIGINS=https://yourdomain.com,https://admin.yourdomain.com
+
+# Allow all (not recommended for production)
+CORS_ORIGINS=*
+```
+
+#### Q: API rate limit errors
+**A:** DeltaPress handles rate limits automatically, but you can:
+1. Add multiple API keys per provider: `ZAI_API_KEY=key1,key2,key3`
+2. The system will cycle through keys automatically
+3. Wait for cooldown period (1-2 minutes)
+
+### Docker Issues
+
+#### Q: Docker Desktop won't start
+**A:** Common solutions:
+1. Ensure WSL2 is installed: `wsl --install`
+2. Enable virtualization in BIOS
+3. Restart Docker Desktop service
+4. Check Windows Hyper-V is enabled
+
+#### Q: Docker container fails health check
+**A:** Debug with these steps:
+```powershell
+# Check container logs
+docker logs deltapress-app
+
+# Check if container is running
+docker ps -a
+
+# Restart container
+docker restart deltapress-app
+
+# Rebuild and run fresh
+docker build -t deltapress:latest .
+docker run -d -p 3000:3000 --name deltapress-new deltapress:latest
+```
+
+### Database Issues
+
+#### Q: Supabase connection fails
+**A:** Verify your Supabase configuration:
+1. Check `SUPABASE_URL` is correct (https://xxx.supabase.co)
+2. Verify `SUPABASE_ANON_KEY` is valid
+3. Test connection in browser: `https://your-project.supabase.co/rest/v1/`
+4. Ensure Row Level Security (RLS) policies allow access
+
+#### Q: "relation does not exist" database error
+**A:** The table might not exist:
+1. Go to Supabase Dashboard → SQL Editor
+2. Run the schema creation scripts
+3. Check the Diagnostics page in Admin panel
+
+### Admin Panel Issues
+
+#### Q: Can't access admin panel
+**A:** Check your user role:
+1. Login to the application
+2. In Supabase, check `profiles` table
+3. Ensure your role is `admin`, `editor`, or `reviewer`
+4. Clear browser cache and re-login
+
+#### Q: API Settings shows "No keys configured"
+**A:** Environment variables not loaded:
+1. Verify `.env.local` exists
+2. Check keys are not empty
+3. Restart the server after editing
+4. Use `.\scripts\powershell\configure-env.ps1` to reconfigure
+
+### Performance Issues
+
+#### Q: Application is slow
+**A:** Try these optimizations:
+```powershell
+# Build for production
+npm run build
+
+# Run in production mode
+NODE_ENV=production npm run dev
+
+# Use Docker for consistent performance
+.\scripts\powershell\install.ps1 -WithDocker
+```
+
+#### Q: High memory usage
+**A:** Node.js memory management:
+```powershell
+# Increase Node memory limit (4GB)
+$env:NODE_OPTIONS="--max-old-space-size=4096"
+npm run dev
+```
+
+### Windows Service Issues
+
+#### Q: Service fails to start
+**A:** Check service configuration:
+```powershell
+# Check service status
+.\scripts\powershell\service-manager.ps1 -Action Status
+
+# View service logs
+Get-Content .\logs\service-stdout.log -Tail 50
+
+# Reinstall service
+.\scripts\powershell\service-manager.ps1 -Action Uninstall
+.\scripts\powershell\service-manager.ps1 -Action Install
+```
+
+#### Q: Service stops unexpectedly
+**A:** Check for crashes:
+1. Look in `logs\service-stderr.log`
+2. Verify environment variables are set
+3. Check disk space
+4. Ensure API keys are valid
+
+### Validation Mode
+
+#### Q: How to test without installing?
+**A:** Use validation mode:
+```powershell
+# Validates everything without making changes
+.\scripts\powershell\install.ps1 -ValidateOnly
+
+# This checks:
+# - Windows version
+# - Administrator rights
+# - Package manager
+# - Node.js
+# - Project files
+# - Docker (if -WithDocker)
+```
+
+### Getting Help
+
+If these solutions don't resolve your issue:
+
+1. **Check logs**: Look at `install-*.log` files
+2. **Run diagnostics**: `.\scripts\powershell\diagnostics.ps1 -All`
+3. **GitHub Issues**: https://github.com/141stfighterwing-collab/DeltaPress/issues
+4. **Include in your report**:
+   - Windows version (`winver`)
+   - Node.js version (`node --version`)
+   - npm version (`npm --version`)
+   - Full error message
+   - Log file content
 
 ## Contributing
 

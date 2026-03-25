@@ -1,7 +1,24 @@
-# DeltaPress
+<p align="center">
+  <img src="logo.png" alt="DeltaPress Logo" width="200">
+</p>
 
-DeltaPress is an AI-assisted newsroom/blog platform built with React, TypeScript, Vite, Express, Supabase, and Gemini.
-It combines a traditional publishing UI (posts, pages, admin views) with an automated **journalist agent pipeline** that can research current events and publish generated content.
+<h1 align="center">DeltaPress</h1>
+
+<p align="center">
+  <strong>AI-Powered Newsroom Platform</strong><br>
+  Built with React, TypeScript, Vite, Express, Supabase, and Gemini
+</p>
+
+<p align="center">
+  <a href="#version">Version 1.6.0</a> •
+  <a href="#-installation">Installation</a> •
+  <a href="#-screenshots">Screenshots</a> •
+  <a href="#-documentation">Documentation</a>
+</p>
+
+---
+
+DeltaPress combines a traditional publishing UI (posts, pages, admin views) with an automated **journalist agent pipeline** that can research current events and publish generated content.
 
 ## Version
 
@@ -21,23 +38,23 @@ See [Version History](#version-history) for changelog.
 
 | Screenshot | Description |
 |------------|-------------|
-| ![Homepage](screenshots/screenshot-1.png) | **Homepage** - Blog landing with category explorer |
-| ![Newsroom](screenshots/screenshot-2.png) | **Newsroom** - News listing and filtering |
-| ![Admin Dashboard](screenshots/screenshot-3.png) | **Admin Dashboard** - System overview and statistics |
-| ![Journalists View](screenshots/screenshot-4.png) | **AI Agents** - Journalist agent management |
-| ![Agent Configuration](screenshots/screenshot-5.png) | **Agent Config** - Agent persona setup modal |
-| ![Diagnostics](screenshots/screenshot-6.png) | **Diagnostics** - System health monitoring |
-| ![Post Editor](screenshots/screenshot-7.png) | **Post Editor** - Content creation interface |
+| <img src="screenshots/screenshot-1.png" width="300"> | **Homepage** - Blog landing with category explorer |
+| <img src="screenshots/screenshot-2.png" width="300"> | **Newsroom** - News listing and filtering |
+| <img src="screenshots/screenshot-3.png" width="300"> | **Admin Dashboard** - System overview and statistics |
+| <img src="screenshots/screenshot-4.png" width="300"> | **AI Agents** - Journalist agent management |
+| <img src="screenshots/screenshot-5.png" width="300"> | **Agent Config** - Agent persona setup modal |
+| <img src="screenshots/screenshot-6.png" width="300"> | **Diagnostics** - System health monitoring |
+| <img src="screenshots/screenshot-7.png" width="300"> | **Post Editor** - Content creation interface |
 
 ### Test Results Screenshots
 
 | Screenshot | Description |
 |------------|-------------|
-| ![Round Robin Test](screenshots/screenshot-8.png) | **Round Robin Logic** - Provider rotation validation |
-| ![Key Rotation Test](screenshots/screenshot-9.png) | **Key Rotation** - Multi-key cycling test |
-| ![Fallback Test](screenshots/screenshot-10.png) | **Fallback Logic** - Provider failover test |
-| ![Health Check](screenshots/screenshot-11.png) | **Health Check** - Application health status |
-| ![Performance Test](screenshots/screenshot-12.png) | **Performance** - Load time validation |
+| <img src="screenshots/screenshot-8.png" width="300"> | **Round Robin Logic** - Provider rotation validation |
+| <img src="screenshots/screenshot-9.png" width="300"> | **Key Rotation** - Multi-key cycling test |
+| <img src="screenshots/screenshot-10.png" width="300"> | **Fallback Logic** - Provider failover test |
+| <img src="screenshots/screenshot-11.png" width="300"> | **Health Check** - Application health status |
+| <img src="screenshots/screenshot-12.png" width="300"> | **Performance** - Load time validation |
 
 ## 📄 Documentation
 

@@ -1,15 +1,40 @@
 {
-  "version": "1.7.0",
+  "version": "1.8.0",
   "name": "DeltaPress",
   "releaseDate": "2025-03-26",
   "changes": [
-    "Custom branding and logo management",
-    "Login page customization with logos and backgrounds",
-    "Custom header HTML and scripts support",
-    "Color scheme configuration",
-    "Custom CSS injection"
+    "Comprehensive analytics system",
+    "User, behavior, article, and traffic analytics",
+    "Configurable proxy system (on-prem, CORS Anywhere, app proxy)",
+    "Removed Gemini as default - all AI providers user-configurable",
+    "Real-time analytics dashboard"
   ],
   "patches": [
+    {
+      "version": "1.8.0",
+      "date": "2025-03-26",
+      "changes": [
+        "User Analytics: Total, new, returning, active users (DAU/WAU/MAU)",
+        "User Analytics: IP geolocation with country/region/city mapping",
+        "User Analytics: Device type, OS, browser breakdown",
+        "User Analytics: User retention and churn rate",
+        "Behavior Analytics: Session duration, pages per session",
+        "Behavior Analytics: Scroll depth, click events, navigation paths",
+        "Behavior Analytics: Entry/exit pages, bounce rate",
+        "Article Analytics: Views, read time, completion rate",
+        "Article Analytics: Shares, likes, comments, saves",
+        "Article Analytics: Author and category performance",
+        "Traffic Analytics: Organic, direct, referral, social sources",
+        "Traffic Analytics: UTM campaign tracking",
+        "Proxy System: On-prem proxy support",
+        "Proxy System: CORS Anywhere proxy support",
+        "Proxy System: App built-in proxy (default)",
+        "Removed Gemini as default provider",
+        "All AI providers disabled by default - user must enable",
+        "Analytics API: 10 new endpoints for data retrieval",
+        "Real-time analytics with 5-minute window"
+      ]
+    },
     {
       "version": "1.7.0",
       "date": "2025-03-26",

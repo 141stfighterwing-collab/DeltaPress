@@ -599,6 +599,298 @@ async function startServer() {
   });
   
   // ========================================================================
+  // Analytics API Endpoints
+  // ========================================================================
+  
+  // Import analytics service
+  const { analyticsService } = await import('./services/analyticsService.js');
+  
+  // Get analytics overview
+  app.get("/api/analytics/overview", (req: Request, res: Response) => {
+    LOG.info('ANALYTICS', 'Fetching analytics overview');
+    
+    const overview = analyticsService.getOverview();
+    const realtime = analyticsService.getRealtimeAnalytics();
+    
+    res.json({
+      success: true,
+      overview,
+      realtime
+    });
+  });
+  
+  // Get user analytics
+  app.get("/api/analytics/users", (req: Request, res: Response) => {
+    LOG.info('ANALYTICS', 'Fetching user analytics');
+    
+    const users = analyticsService.getUserAnalytics();
+    
+    // Calculate aggregations
+    const totalUsers = users.length;
+    const newUsers = users.filter(u => u.isFirstVisit).length;
+    const returningUsers = totalUsers - newUsers;
+    const loggedInUsers = users.filter(u => u.isLoggedIn).length;
+    
+    // Device breakdown
+    const deviceCounts = { mobile: 0, desktop: 0, tablet: 0 };
+    users.forEach(u => deviceCounts[u.deviceType]++);
+    
+    // Country breakdown
+    const countryCounts: Record<string, number> = {};
+    users.forEach(u => {
+      countryCounts[u.country] = (countryCounts[u.country] || 0) + 1;
+    });
+    
+    // Browser breakdown
+    const browserCounts: Record<string, number> = {};
+    users.forEach(u => {
+      browserCounts[u.browser] = (browserCounts[u.browser] || 0) + 1;
+    });
+    
+    // OS breakdown
+    const osCounts: Record<string, number> = {};
+    users.forEach(u => {
+      osCounts[u.os] = (osCounts[u.os] || 0) + 1;
+    });
+    
+    res.json({
+      success: true,
+      summary: {
+        totalUsers,
+        newUsers,
+        returningUsers,
+        loggedInUsers,
+        guestUsers: totalUsers - loggedInUsers
+      },
+      devices: deviceCounts,
+      countries: countryCounts,
+      browsers: browserCounts,
+      os: osCounts,
+      users: users.slice(0, 100) // Limit to 100 for performance
+    });
+  });
+  
+  // Get behavior analytics
+  app.get("/api/analytics/behavior", (req: Request, res: Response) => {
+    LOG.info('ANALYTICS', 'Fetching behavior analytics');
+    
+    const { startDate, endDate } = req.query;
+    
+    const behavior = analyticsService.getBehaviorAnalytics(
+      startDate ? new Date(startDate as string) : undefined,
+      endDate ? new Date(endDate as string) : undefined
+    );
+    
+    res.json({
+      success: true,
+      behavior
+    });
+  });
+  
+  // Get article analytics
+  app.get("/api/analytics/articles", (req: Request, res: Response) => {
+    LOG.info('ANALYTICS', 'Fetching article analytics');
+    
+    const { articleId } = req.query;
+    
+    const articles = analyticsService.getArticleAnalytics(articleId as string);
+    
+    res.json({
+      success: true,
+      articles
+    });
+  });
+  
+  // Get traffic analytics
+  app.get("/api/analytics/traffic", (req: Request, res: Response) => {
+    LOG.info('ANALYTICS', 'Fetching traffic analytics');
+    
+    const traffic = analyticsService.getTrafficAnalytics();
+    
+    // Calculate totals
+    const totals = traffic.reduce((acc, t) => ({
+      sessions: acc.sessions + t.sessions,
+      users: acc.users + t.users,
+      newUsers: acc.newUsers + t.newUsers,
+      conversions: acc.conversions + (t.conversions || 0)
+    }), { sessions: 0, users: 0, newUsers: 0, conversions: 0 });
+    
+    // Group by source type
+    const byType = {
+      organic: traffic.filter(t => t.medium === 'search'),
+      direct: traffic.filter(t => t.source === 'direct'),
+      referral: traffic.filter(t => t.medium === 'referral'),
+      social: traffic.filter(t => t.medium === 'social'),
+      campaign: traffic.filter(t => t.campaign)
+    };
+    
+    res.json({
+      success: true,
+      totals,
+      byType,
+      sources: traffic
+    });
+  });
+  
+  // Get geographic analytics
+  app.get("/api/analytics/geographic", (req: Request, res: Response) => {
+    LOG.info('ANALYTICS', 'Fetching geographic analytics');
+    
+    const geo = analyticsService.getGeographicAnalytics();
+    
+    // Group by country
+    const byCountry: Record<string, any> = {};
+    geo.forEach(g => {
+      if (!byCountry[g.country]) {
+        byCountry[g.country] = {
+          country: g.country,
+          users: 0,
+          sessions: 0,
+          regions: []
+        };
+      }
+      byCountry[g.country].users += g.users;
+      byCountry[g.country].sessions += g.sessions;
+      if (g.region && !byCountry[g.country].regions.includes(g.region)) {
+        byCountry[g.country].regions.push(g.region);
+      }
+    });
+    
+    const countries = Object.values(byCountry).sort((a: any, b: any) => b.users - a.users);
+    
+    res.json({
+      success: true,
+      countries,
+      locations: geo
+    });
+  });
+  
+  // Get daily metrics
+  app.get("/api/analytics/daily", (req: Request, res: Response) => {
+    LOG.info('ANALYTICS', 'Fetching daily metrics');
+    
+    const { startDate, endDate } = req.query;
+    const start = (startDate as string) || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const end = (endDate as string) || new Date().toISOString().split('T')[0];
+    
+    const daily = analyticsService.getDailyMetrics(start, end);
+    
+    res.json({
+      success: true,
+      startDate: start,
+      endDate: end,
+      metrics: daily
+    });
+  });
+  
+  // Get real-time analytics
+  app.get("/api/analytics/realtime", (req: Request, res: Response) => {
+    const realtime = analyticsService.getRealtimeAnalytics();
+    
+    res.json({
+      success: true,
+      realtime
+    });
+  });
+  
+  // Track analytics event
+  app.post("/api/analytics/track", (req: Request, res: Response) => {
+    const { event, data } = req.body;
+    
+    LOG.info('ANALYTICS', `Tracking event: ${event}`);
+    
+    // Generate session ID if not provided
+    const sessionId = data.sessionId || `session-${Date.now()}`;
+    
+    // Track the event based on type
+    switch (event) {
+      case 'page_view':
+        analyticsService.trackPageView(sessionId, data.path, data.title, data.referrer);
+        break;
+      case 'article_view':
+        analyticsService.trackArticleView(sessionId, data.articleId, data.title, data.author, data.category);
+        break;
+      case 'article_read':
+        analyticsService.trackArticleRead(sessionId, data.articleId, data.readTime, data.completionPercent);
+        break;
+      case 'search':
+        analyticsService.trackSearch(sessionId, data.query, data.resultsCount || 0);
+        break;
+      case 'cta_click':
+        analyticsService.trackCtaClick(sessionId, data.ctaId, data.ctaText, data.location);
+        break;
+      case 'share':
+        analyticsService.trackShare(sessionId, data.articleId, data.platform);
+        break;
+      case 'scroll':
+        analyticsService.trackScrollDepth(sessionId, data.path, data.depth);
+        break;
+      case 'session_start':
+        // Session start requires full user analytics
+        const sessionIdResult = analyticsService.startSession(data.userAnalytics);
+        res.json({ success: true, sessionId: sessionIdResult });
+        return;
+      case 'session_end':
+        analyticsService.endSession(sessionId);
+        break;
+      default:
+        // Generic event tracking
+        analyticsService.trackEvent({
+          id: `evt-${Date.now()}`,
+          sessionId,
+          anonymousId: data.anonymousId || 'anonymous',
+          timestamp: new Date(),
+          type: event,
+          data
+        });
+    }
+    
+    res.json({ success: true });
+  });
+  
+  // Proxy Configuration Endpoints
+  app.get("/api/proxy/config", (req: Request, res: Response) => {
+    const { proxyService } = await import('./services/proxyService.js');
+    
+    res.json({
+      success: true,
+      config: proxyService.getConfig(),
+      providers: proxyService.getProviders().map(p => ({
+        id: p.id,
+        name: p.name,
+        enabled: p.enabled,
+        models: p.models
+        // Don't expose API keys
+      }))
+    });
+  });
+  
+  app.put("/api/proxy/config", (req: Request, res: Response) => {
+    const { proxyService } = await import('./services/proxyService.js');
+    const { config } = req.body;
+    
+    proxyService.setConfig(config);
+    
+    LOG.success('PROXY', 'Proxy configuration updated');
+    res.json({ success: true, config: proxyService.getConfig() });
+  });
+  
+  app.put("/api/proxy/provider/:id", (req: Request, res: Response) => {
+    const { proxyService } = await import('./services/proxyService.js');
+    const { id } = req.params;
+    const { enabled, apiKey, endpoint } = req.body;
+    
+    if (enabled) {
+      proxyService.enableProvider(id, apiKey, endpoint);
+    } else {
+      proxyService.disableProvider(id);
+    }
+    
+    LOG.success('PROXY', `Provider ${id} ${enabled ? 'enabled' : 'disabled'}`);
+    res.json({ success: true, providerId: id, enabled });
+  });
+  
+  // ========================================================================
   // Research Proxy Endpoint (OpenAI-compatible providers)
   // ========================================================================
   
